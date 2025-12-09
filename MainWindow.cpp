@@ -10,8 +10,12 @@
 
 // Menu IDs
 enum MenuID {
-    ID_FILE_OPEN = 1001,
+    ID_FILE_NEW = 1001,
+    ID_FILE_OPEN,
     ID_FILE_SAVE,
+    ID_FILE_SAVE_AS,
+    ID_FILE_CLOSE,
+    ID_FILE_IMPORT_AUDIO,
     ID_FILE_EXIT,
     ID_EDIT_UNDO,
     ID_EDIT_REDO,
@@ -78,6 +82,9 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
         MessageBox(m_hwnd, L"Failed to initialize audio engine", L"Error", MB_OK);
     }
 
+    // Create project
+    m_project = std::make_unique<Project>();
+
     // Create child views
     RECT rc;
     GetClientRect(m_hwnd, &rc);
@@ -90,7 +97,6 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     // Timeline view
     m_timelineView = std::make_unique<TimelineView>();
     m_timelineView->create(m_hwnd, 0, 0, clientWidth, timelineHeight);
-    m_timelineView->setBPM(m_bpm);
     
     // Set playhead callback
     m_timelineView->setPlayheadCallback([this](double time) {
@@ -101,7 +107,6 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     // Transport bar
     m_transportBar = std::make_unique<TransportBar>();
     m_transportBar->create(m_hwnd, 0, timelineHeight, clientWidth, transportHeight);
-    m_transportBar->setBPM(m_bpm);
     
     // Setup transport callbacks
     m_transportBar->setPlayCallback([this]() { play(); });
@@ -113,10 +118,8 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
         m_transportBar->setPosition(0);
     });
 
-    // Add a default track
-    auto defaultTrack = std::make_shared<Track>(L"Track 1");
-    defaultTrack->setColor(0xFF4A90D9);
-    m_timelineView->addTrack(defaultTrack);
+    // Sync project to UI
+    syncProjectToUI();
 
     ShowWindow(m_hwnd, SW_SHOW);
     UpdateWindow(m_hwnd);
@@ -124,6 +127,7 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     // Start playback position timer (30 fps update)
     m_timerId = SetTimer(m_hwnd, TIMER_PLAYBACK, 33, nullptr);
 
+    updateWindowTitle();
     return true;
 }
 
@@ -132,10 +136,15 @@ void MainWindow::setupMenus() {
     
     // File menu
     HMENU fileMenu = CreatePopupMenu();
-    AppendMenu(fileMenu, MF_STRING, ID_FILE_OPEN, L"&Open Audio...\tCtrl+O");
+    AppendMenu(fileMenu, MF_STRING, ID_FILE_NEW, L"&New Project\tCtrl+N");
+    AppendMenu(fileMenu, MF_STRING, ID_FILE_OPEN, L"&Open Project...\tCtrl+O");
     AppendMenu(fileMenu, MF_STRING, ID_FILE_SAVE, L"&Save Project\tCtrl+S");
+    AppendMenu(fileMenu, MF_STRING, ID_FILE_SAVE_AS, L"Save Project &As...\tCtrl+Shift+S");
+    AppendMenu(fileMenu, MF_STRING, ID_FILE_CLOSE, L"&Close Project");
     AppendMenu(fileMenu, MF_SEPARATOR, 0, nullptr);
-    AppendMenu(fileMenu, MF_STRING, ID_FILE_EXIT, L"E&xit");
+    AppendMenu(fileMenu, MF_STRING, ID_FILE_IMPORT_AUDIO, L"&Import Audio...\tCtrl+I");
+    AppendMenu(fileMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(fileMenu, MF_STRING, ID_FILE_EXIT, L"E&xit\tAlt+F4");
     AppendMenu(menuBar, MF_POPUP, (UINT_PTR)fileMenu, L"&File");
     
     // Edit menu
@@ -172,17 +181,218 @@ void MainWindow::setupMenus() {
     SetMenu(m_hwnd, menuBar);
 }
 
+void MainWindow::updateWindowTitle() {
+    std::wstring title = L"Audio Studio - ";
+    title += m_project->getProjectName();
+    
+    if (m_project->isModified()) {
+        title += L" *";
+    }
+    
+    SetWindowText(m_hwnd, title.c_str());
+}
+
+void MainWindow::syncProjectToUI() {
+    // Clear timeline tracks
+    while (!m_timelineView->getTracks().empty()) {
+        m_timelineView->removeTrack(0);
+    }
+    
+    // Add tracks from project
+    for (auto& track : m_project->getTracks()) {
+        m_timelineView->addTrack(track);
+    }
+    
+    // Update BPM
+    m_timelineView->setBPM(m_project->getBPM());
+    m_transportBar->setBPM(m_project->getBPM());
+    
+    // Reset playhead
+    m_timelineView->setPlayheadPosition(0);
+    m_transportBar->setPosition(0);
+    m_transportBar->setDuration(0);
+    
+    // Find longest region for duration
+    double maxDuration = 0;
+    for (const auto& track : m_project->getTracks()) {
+        for (const auto& region : track->getRegions()) {
+            maxDuration = std::max(maxDuration, region.startTime + region.duration);
+        }
+    }
+    m_transportBar->setDuration(maxDuration);
+    
+    // Set the first clip for audio engine playback
+    for (const auto& track : m_project->getTracks()) {
+        for (const auto& region : track->getRegions()) {
+            if (region.clip) {
+                m_audioEngine->setClip(region.clip);
+                break;
+            }
+        }
+    }
+    
+    m_timelineView->invalidate();
+}
+
+void MainWindow::syncUIToProject() {
+    // The tracks are shared, so they're already synced
+    // Just mark as modified
+    m_project->setModified(true);
+    updateWindowTitle();
+}
+
+bool MainWindow::promptSaveIfModified() {
+    if (!m_project->isModified()) {
+        return true;
+    }
+    
+    std::wstring message = L"Do you want to save changes to \"" + 
+                           m_project->getProjectName() + L"\"?";
+    
+    int result = MessageBox(m_hwnd, message.c_str(), L"Audio Studio", 
+                            MB_YESNOCANCEL | MB_ICONQUESTION);
+    
+    switch (result) {
+        case IDYES:
+            return saveProject();
+        case IDNO:
+            return true;
+        case IDCANCEL:
+        default:
+            return false;
+    }
+}
+
+void MainWindow::newProject() {
+    if (!promptSaveIfModified()) {
+        return;
+    }
+    
+    stop();
+    
+    m_project->clear();
+    
+    // Add a default track
+    auto track = std::make_shared<Track>(L"Track 1");
+    track->setColor(0xFF4A90D9);
+    m_project->addTrack(track);
+    m_project->setModified(false);
+    
+    syncProjectToUI();
+    updateWindowTitle();
+}
+
+bool MainWindow::openProject() {
+    if (!promptSaveIfModified()) {
+        return false;
+    }
+    
+    OPENFILENAME ofn = {};
+    wchar_t filename[MAX_PATH] = {};
+    
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = Project::FILE_FILTER;
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = L"austd";
+    
+    if (!GetOpenFileName(&ofn)) {
+        return false;
+    }
+    
+    stop();
+    
+    if (!m_project->load(filename)) {
+        MessageBox(m_hwnd, L"Failed to open project file", L"Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+    
+    syncProjectToUI();
+    updateWindowTitle();
+    return true;
+}
+
+bool MainWindow::saveProject() {
+    if (!m_project->hasFilename()) {
+        return saveProjectAs();
+    }
+    
+    if (!m_project->save(m_project->getFilename())) {
+        MessageBox(m_hwnd, L"Failed to save project file", L"Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+    
+    updateWindowTitle();
+    return true;
+}
+
+bool MainWindow::saveProjectAs() {
+    OPENFILENAME ofn = {};
+    wchar_t filename[MAX_PATH] = {};
+    
+    // Pre-fill with current project name
+    wcscpy_s(filename, m_project->getProjectName().c_str());
+    
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = Project::FILE_FILTER;
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = L"austd";
+    
+    if (!GetSaveFileName(&ofn)) {
+        return false;
+    }
+    
+    if (!m_project->save(filename)) {
+        MessageBox(m_hwnd, L"Failed to save project file", L"Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+    
+    updateWindowTitle();
+    return true;
+}
+
+bool MainWindow::closeProject() {
+    if (!promptSaveIfModified()) {
+        return false;
+    }
+    
+    newProject();
+    return true;
+}
+
+bool MainWindow::importAudioFile() {
+    OPENFILENAME ofn = {};
+    wchar_t filename[MAX_PATH] = {};
+    
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = L"WAV Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    
+    if (!GetOpenFileName(&ofn)) {
+        return false;
+    }
+    
+    return loadAudioFile(filename);
+}
+
 bool MainWindow::loadAudioFile(const std::wstring& filename) {
-    auto clip = std::make_shared<AudioClip>();
-    if (!clip->loadFromFile(filename)) {
+    // Load clip through project (uses cache)
+    auto clip = m_project->getOrLoadClip(filename);
+    if (!clip) {
         MessageBox(m_hwnd, L"Failed to load audio file", L"Error", MB_OK);
         return false;
     }
     
-    m_loadedClips.push_back(clip);
-    
     // Add to first track as a region
-    auto& tracks = m_timelineView->getTracks();
+    auto& tracks = m_project->getTracks();
     if (!tracks.empty()) {
         TrackRegion region;
         region.clip = clip;
@@ -197,6 +407,9 @@ bool MainWindow::loadAudioFile(const std::wstring& filename) {
         
         // Update transport with duration
         m_transportBar->setDuration(clip->getDuration());
+        
+        m_project->setModified(true);
+        updateWindowTitle();
     }
     
     m_timelineView->invalidate();
@@ -206,7 +419,7 @@ bool MainWindow::loadAudioFile(const std::wstring& filename) {
 void MainWindow::play() {
     m_audioEngine->play();
     m_transportBar->setPlaying(true);
-    m_timelineView->setFollowPlayhead(true);  // Re-enable follow mode on play
+    m_timelineView->setFollowPlayhead(true);
 }
 
 void MainWindow::pause() {
@@ -219,7 +432,7 @@ void MainWindow::stop() {
     m_transportBar->setPlaying(false);
     m_transportBar->setPosition(0);
     m_timelineView->setPlayheadPosition(0);
-    m_timelineView->setFollowPlayhead(true);  // Re-enable follow mode on stop
+    m_timelineView->setFollowPlayhead(true);
 }
 
 void MainWindow::togglePlayPause() {
@@ -257,26 +470,32 @@ void MainWindow::onResize(int width, int height) {
 
 void MainWindow::onCommand(int id) {
     switch (id) {
+    case ID_FILE_NEW:
+        newProject();
+        break;
+        
     case ID_FILE_OPEN:
-        {
-            OPENFILENAME ofn = {};
-            wchar_t filename[MAX_PATH] = {};
-            
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = m_hwnd;
-            ofn.lpstrFilter = L"WAV Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
-            ofn.lpstrFile = filename;
-            ofn.nMaxFile = MAX_PATH;
-            ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-            
-            if (GetOpenFileName(&ofn)) {
-                loadAudioFile(filename);
-            }
-        }
+        openProject();
+        break;
+        
+    case ID_FILE_SAVE:
+        saveProject();
+        break;
+        
+    case ID_FILE_SAVE_AS:
+        saveProjectAs();
+        break;
+        
+    case ID_FILE_CLOSE:
+        closeProject();
+        break;
+        
+    case ID_FILE_IMPORT_AUDIO:
+        importAudioFile();
         break;
         
     case ID_FILE_EXIT:
-        PostQuitMessage(0);
+        onClose();
         break;
         
     case ID_TRANSPORT_PLAY:
@@ -300,7 +519,9 @@ void MainWindow::onCommand(int id) {
             // Cycle through colors
             uint32_t colors[] = {0xFF4A90D9, 0xFF5CB85C, 0xFFD9534F, 0xFFF0AD4E, 0xFF9B59B6};
             track->setColor(colors[(trackNum - 2) % 5]);
+            m_project->addTrack(track);
             m_timelineView->addTrack(track);
+            updateWindowTitle();
         }
         break;
         
@@ -321,13 +542,28 @@ void MainWindow::onDropFiles(HDROP hDrop) {
     for (UINT i = 0; i < count; ++i) {
         DragQueryFile(hDrop, i, filename, MAX_PATH);
         
-        // Check if it's a WAV file
+        // Check file type
         if (PathMatchSpec(filename, L"*.wav")) {
             loadAudioFile(filename);
+        }
+        else if (PathMatchSpec(filename, L"*.austd")) {
+            if (promptSaveIfModified()) {
+                stop();
+                if (m_project->load(filename)) {
+                    syncProjectToUI();
+                    updateWindowTitle();
+                }
+            }
         }
     }
     
     DragFinish(hDrop);
+}
+
+void MainWindow::onClose() {
+    if (promptSaveIfModified()) {
+        DestroyWindow(m_hwnd);
+    }
 }
 
 LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -376,8 +612,46 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 window->m_timelineView->setPlayheadPosition(0);
                 window->m_transportBar->setPosition(0);
                 return 0;
+            case 'N':
+                if (GetKeyState(VK_CONTROL) & 0x8000) {
+                    window->newProject();
+                    return 0;
+                }
+                break;
+            case 'O':
+                if (GetKeyState(VK_CONTROL) & 0x8000) {
+                    window->openProject();
+                    return 0;
+                }
+                break;
+            case 'S':
+                if (GetKeyState(VK_CONTROL) & 0x8000) {
+                    if (GetKeyState(VK_SHIFT) & 0x8000) {
+                        window->saveProjectAs();
+                    } else {
+                        window->saveProject();
+                    }
+                    return 0;
+                }
+                break;
+            case 'I':
+                if (GetKeyState(VK_CONTROL) & 0x8000) {
+                    window->importAudioFile();
+                    return 0;
+                }
+                break;
+            case 'T':
+                if (GetKeyState(VK_CONTROL) & 0x8000) {
+                    window->onCommand(ID_TRACK_ADD);
+                    return 0;
+                }
+                break;
             }
             break;
+            
+        case WM_CLOSE:
+            window->onClose();
+            return 0;
             
         case WM_DESTROY:
             PostQuitMessage(0);

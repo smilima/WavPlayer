@@ -1,0 +1,21 @@
+[Project]
+Version=1
+BPM=120.000000
+SampleRate=44100.000000
+
+[Track:0]
+Name=BNL
+Color=FF4A90D9
+Volume=1.000000
+Pan=0.000000
+Muted=0
+Solo=0
+Armed=0
+Height=100
+
+[Region:0:0]
+ClipPath=C:\Users\andre\OneDrive\Documents\Code\WavPlayer\01 - Barenaked Ladies - Hello City.wav
+StartTime=0.000000
+ClipOffset=0.000000
+Duration=202.436984
+

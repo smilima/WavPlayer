@@ -3,5 +3,5 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
-  <Project Path="WavPlayer.vcxproj" />
+  <Project Path="WavPlayer.vcxproj" Id="48aff0b6-1c6e-46c5-b4dd-7bf0dc95857e" />
 </Solution>

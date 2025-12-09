@@ -3,6 +3,7 @@
 #include "TransportBar.h"
 #include "TimelineView.h"
 #include "AudioEngine.h"
+#include "Project.h"
 #include <memory>
 
 class MainWindow {
@@ -13,7 +14,15 @@ public:
     bool create(const wchar_t* title, int width, int height);
     HWND getHWND() const { return m_hwnd; }
 
+    // Project operations
+    void newProject();
+    bool openProject();
+    bool saveProject();
+    bool saveProjectAs();
+    bool closeProject();
+    
     // File operations
+    bool importAudioFile();
     bool loadAudioFile(const std::wstring& filename);
     
     // Playback
@@ -27,8 +36,13 @@ private:
     void onResize(int width, int height);
     void onCommand(int id);
     void onDropFiles(HDROP hDrop);
+    void onClose();
     void setupMenus();
     void updatePlaybackPosition();
+    void updateWindowTitle();
+    void syncProjectToUI();
+    void syncUIToProject();
+    bool promptSaveIfModified();  // Returns false if user cancels
     
     HWND m_hwnd = nullptr;
     UINT_PTR m_timerId = 0;
@@ -36,8 +50,5 @@ private:
     std::unique_ptr<TransportBar> m_transportBar;
     std::unique_ptr<TimelineView> m_timelineView;
     std::unique_ptr<AudioEngine> m_audioEngine;
-    
-    // Current project state
-    std::vector<std::shared_ptr<AudioClip>> m_loadedClips;
-    double m_bpm = 120.0;
+    std::unique_ptr<Project> m_project;
 };

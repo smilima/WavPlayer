@@ -24,6 +24,7 @@
     <ClCompile Include="D2DWindow.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MainWindow.cpp" />
+    <ClCompile Include="Project.cpp" />
     <ClCompile Include="TimelineView.cpp" />
     <ClCompile Include="Track.cpp" />
     <ClCompile Include="TransportBar.cpp" />
@@ -33,6 +34,7 @@
     <ClInclude Include="AudioEngine.h" />
     <ClInclude Include="D2DWindow.h" />
     <ClInclude Include="MainWindow.h" />
+    <ClInclude Include="Project.h" />
     <ClInclude Include="TimelineView.h" />
     <ClInclude Include="Track.h" />
     <ClInclude Include="TransportBar.h" />
