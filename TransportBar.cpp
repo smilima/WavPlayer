@@ -1,0 +1,306 @@
+#include "TransportBar.h"
+#include "Application.h"
+#include <sstream>
+#include <iomanip>
+
+void TransportBar::setPosition(double seconds) {
+    m_position = seconds;
+    invalidate();
+}
+
+void TransportBar::setDuration(double seconds) {
+    m_duration = seconds;
+    invalidate();
+}
+
+void TransportBar::onResize(int width, int height) {
+    // Force buttons to be re-laid out with new dimensions
+    m_buttonsInitialized = false;
+}
+
+void TransportBar::layoutButtons() {
+    m_buttons.clear();
+    
+    float btnSize = 36.0f;
+    float spacing = 8.0f;
+    float startX = 20.0f;
+    float centerY = static_cast<float>(getHeight()) / 2.0f - btnSize / 2.0f;
+    
+    // Rewind
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Rewind});
+    startX += btnSize + spacing;
+    
+    // Stop
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Stop});
+    startX += btnSize + spacing;
+    
+    // Play/Pause
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, 
+                         m_isPlaying ? Button::Pause : Button::Play});
+    startX += btnSize + spacing;
+    
+    // Fast Forward
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FastForward});
+    
+    m_buttonsInitialized = true;
+}
+
+void TransportBar::onRender(ID2D1RenderTarget* rt) {
+    // Background
+    fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()), 
+             DAWColors::Transport);
+    
+    // Top border
+    drawLine(0, 0, static_cast<float>(getWidth()), 0, DAWColors::GridLine, 1.0f);
+    
+    if (!m_buttonsInitialized) {
+        layoutButtons();
+    }
+    
+    // Draw transport buttons
+    for (const auto& btn : m_buttons) {
+        drawButton(rt, btn);
+    }
+    
+    // Time display
+    float timeX = 200.0f;
+    float timeY = static_cast<float>(getHeight()) / 2.0f - 10.0f;
+    
+    // Current position
+    std::wstring posStr = formatTime(m_position);
+    drawText(posStr, timeX, timeY, DAWColors::TextPrimary, 120, 20);
+    
+    // Separator
+    drawText(L"/", timeX + 80, timeY, DAWColors::TextSecondary, 20, 20);
+    
+    // Duration
+    std::wstring durStr = formatTime(m_duration);
+    drawText(durStr, timeX + 100, timeY, DAWColors::TextSecondary, 120, 20);
+    
+    // BPM display
+    float bpmX = static_cast<float>(getWidth()) - 150.0f;
+    std::wostringstream bpmStr;
+    bpmStr << std::fixed << std::setprecision(1) << m_bpm << L" BPM";
+    drawText(bpmStr.str(), bpmX, timeY, DAWColors::TextSecondary, 100, 20);
+}
+
+void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
+    Color bgColor = btn.pressed ? DAWColors::ButtonPressed :
+                    btn.hovered ? DAWColors::ButtonHover : DAWColors::ButtonNormal;
+    
+    // Button background with rounded corners
+    fillRect(btn.x, btn.y, btn.w, btn.h, bgColor);
+    drawRect(btn.x, btn.y, btn.w, btn.h, DAWColors::GridLine, 1.0f);
+    
+    float cx = btn.x + btn.w / 2.0f;
+    float cy = btn.y + btn.h / 2.0f;
+    float iconSize = 12.0f;
+    
+    switch (btn.type) {
+        case Button::Play:
+            drawPlayIcon(rt, cx, cy, iconSize);
+            break;
+        case Button::Pause:
+            drawPauseIcon(rt, cx, cy, iconSize);
+            break;
+        case Button::Stop:
+            drawStopIcon(rt, cx, cy, iconSize);
+            break;
+        case Button::Rewind:
+            drawRewindIcon(rt, cx, cy, iconSize);
+            break;
+        case Button::FastForward:
+            drawFastForwardIcon(rt, cx, cy, iconSize);
+            break;
+    }
+}
+
+void TransportBar::drawPlayIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    // Triangle pointing right
+    ID2D1PathGeometry* geometry = nullptr;
+    Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
+    
+    if (geometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        geometry->Open(&sink);
+        
+        if (sink) {
+            sink->BeginFigure(D2D1::Point2F(cx - size * 0.4f, cy - size * 0.6f), 
+                              D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(cx + size * 0.6f, cy));
+            sink->AddLine(D2D1::Point2F(cx - size * 0.4f, cy + size * 0.6f));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+            sink->Release();
+            
+            getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+            rt->FillGeometry(geometry, getBrush());
+        }
+        geometry->Release();
+    }
+}
+
+void TransportBar::drawPauseIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    float barWidth = size * 0.25f;
+    float barHeight = size * 1.0f;
+    float gap = size * 0.2f;
+    
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    rt->FillRectangle(D2D1::RectF(cx - gap - barWidth, cy - barHeight / 2,
+                                   cx - gap, cy + barHeight / 2), getBrush());
+    rt->FillRectangle(D2D1::RectF(cx + gap, cy - barHeight / 2,
+                                   cx + gap + barWidth, cy + barHeight / 2), getBrush());
+}
+
+void TransportBar::drawStopIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    float halfSize = size * 0.5f;
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    rt->FillRectangle(D2D1::RectF(cx - halfSize, cy - halfSize,
+                                   cx + halfSize, cy + halfSize), getBrush());
+}
+
+void TransportBar::drawRewindIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    
+    // Two triangles pointing left + bar
+    ID2D1PathGeometry* geometry = nullptr;
+    Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
+    
+    if (geometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        geometry->Open(&sink);
+        
+        if (sink) {
+            float triSize = size * 0.5f;
+            
+            // First triangle
+            sink->BeginFigure(D2D1::Point2F(cx, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(cx - triSize, cy));
+            sink->AddLine(D2D1::Point2F(cx, cy + triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            
+            // Second triangle
+            sink->BeginFigure(D2D1::Point2F(cx + triSize, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(cx, cy));
+            sink->AddLine(D2D1::Point2F(cx + triSize, cy + triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            
+            sink->Close();
+            sink->Release();
+            
+            rt->FillGeometry(geometry, getBrush());
+        }
+        geometry->Release();
+    }
+}
+
+void TransportBar::drawFastForwardIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    
+    ID2D1PathGeometry* geometry = nullptr;
+    Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
+    
+    if (geometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        geometry->Open(&sink);
+        
+        if (sink) {
+            float triSize = size * 0.5f;
+            
+            // First triangle
+            sink->BeginFigure(D2D1::Point2F(cx - triSize, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(cx, cy));
+            sink->AddLine(D2D1::Point2F(cx - triSize, cy + triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            
+            // Second triangle
+            sink->BeginFigure(D2D1::Point2F(cx, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(cx + triSize, cy));
+            sink->AddLine(D2D1::Point2F(cx, cy + triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            
+            sink->Close();
+            sink->Release();
+            
+            rt->FillGeometry(geometry, getBrush());
+        }
+        geometry->Release();
+    }
+}
+
+void TransportBar::onMouseDown(int x, int y, int button) {
+    if (button != 0) return;
+    
+    for (auto& btn : m_buttons) {
+        if (x >= btn.x && x <= btn.x + btn.w &&
+            y >= btn.y && y <= btn.y + btn.h) {
+            btn.pressed = true;
+            invalidate();
+            break;
+        }
+    }
+}
+
+void TransportBar::onMouseUp(int x, int y, int button) {
+    if (button != 0) return;
+    
+    for (auto& btn : m_buttons) {
+        if (btn.pressed) {
+            btn.pressed = false;
+            
+            // Check if still over button (click completed)
+            if (x >= btn.x && x <= btn.x + btn.w &&
+                y >= btn.y && y <= btn.y + btn.h) {
+                switch (btn.type) {
+                    case Button::Play:
+                        if (m_onPlay) m_onPlay();
+                        break;
+                    case Button::Pause:
+                        if (m_onPause) m_onPause();
+                        break;
+                    case Button::Stop:
+                        if (m_onStop) m_onStop();
+                        break;
+                    case Button::Rewind:
+                        if (m_onRewind) m_onRewind();
+                        break;
+                    case Button::FastForward:
+                        if (m_onFastForward) m_onFastForward();
+                        break;
+                }
+            }
+        }
+    }
+    
+    layoutButtons();  // Refresh play/pause state
+    invalidate();
+}
+
+void TransportBar::onMouseMove(int x, int y) {
+    bool needsRedraw = false;
+    
+    for (auto& btn : m_buttons) {
+        bool wasHovered = btn.hovered;
+        btn.hovered = (x >= btn.x && x <= btn.x + btn.w &&
+                       y >= btn.y && y <= btn.y + btn.h);
+        if (wasHovered != btn.hovered) {
+            needsRedraw = true;
+        }
+    }
+    
+    if (needsRedraw) {
+        invalidate();
+    }
+}
+
+std::wstring TransportBar::formatTime(double seconds) {
+    int mins = static_cast<int>(seconds) / 60;
+    int secs = static_cast<int>(seconds) % 60;
+    int ms = static_cast<int>((seconds - static_cast<int>(seconds)) * 1000);
+    
+    std::wostringstream ss;
+    ss << std::setfill(L'0') << std::setw(2) << mins << L":"
+       << std::setw(2) << secs << L"."
+       << std::setw(3) << ms;
+    return ss.str();
+}
