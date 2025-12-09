@@ -22,7 +22,7 @@ bool D2DWindow::create(HWND parent, int x, int y, int width, int height,
 
     WNDCLASSEX wc = {};
     wc.cbSize = sizeof(WNDCLASSEX);
-    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;  // CS_DBLCLKS for double-click support
     wc.lpfnWndProc = WndProc;
     wc.hInstance = Application::getInstance().getHInstance();
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
@@ -234,6 +234,14 @@ LRESULT CALLBACK D2DWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             int dipY = static_cast<int>(window->pixelsToDipsY(GET_Y_LPARAM(lParam)));
             window->onMouseDown(dipX, dipY, 0);
             SetCapture(hwnd);
+        }
+        return 0;
+
+    case WM_LBUTTONDBLCLK:
+        {
+            int dipX = static_cast<int>(window->pixelsToDipsX(GET_X_LPARAM(lParam)));
+            int dipY = static_cast<int>(window->pixelsToDipsY(GET_Y_LPARAM(lParam)));
+            window->onDoubleClick(dipX, dipY, 0);
         }
         return 0;
 

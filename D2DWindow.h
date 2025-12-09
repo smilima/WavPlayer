@@ -68,6 +68,7 @@ protected:
     virtual void onMouseUp(int x, int y, int button) {}
     virtual void onMouseMove(int x, int y) {}
     virtual void onMouseWheel(int x, int y, int delta) {}
+    virtual void onDoubleClick(int x, int y, int button) {}
     virtual void onKeyDown(int vkey) {}
     virtual void onKeyUp(int vkey) {}
 

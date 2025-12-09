@@ -4,6 +4,20 @@
 #include <sstream>
 #include <iomanip>
 #include <cmath>
+#include <CommCtrl.h>
+
+#pragma comment(lib, "Comctl32.lib")
+
+TimelineView::~TimelineView() {
+    if (m_editControl) {
+        DestroyWindow(m_editControl);
+        m_editControl = nullptr;
+    }
+    if (m_editFont) {
+        DeleteObject(m_editFont);
+        m_editFont = nullptr;
+    }
+}
 
 void TimelineView::addTrack(std::shared_ptr<Track> track) {
     m_tracks.push_back(track);
@@ -482,4 +496,149 @@ void TimelineView::onMouseWheel(int x, int y, int delta) {
         }
     }
     invalidate();
+}
+
+void TimelineView::onDoubleClick(int x, int y, int button) {
+    if (button != 0) return;
+    
+    // Check if double-click is in track header area (on track name)
+    if (x < TRACK_HEADER_WIDTH) {
+        int trackIndex = getTrackAtY(y);
+        if (trackIndex >= 0) {
+            // Check if click is in the name area (top portion of track header)
+            int trackY = RULER_HEIGHT - m_scrollY;
+            for (int i = 0; i < trackIndex; ++i) {
+                trackY += m_tracks[i]->getHeight();
+            }
+            
+            // Name area is roughly the top 30 pixels of the track header
+            int nameAreaBottom = trackY + 30;
+            if (y >= trackY && y < nameAreaBottom) {
+                startTrackNameEdit(trackIndex);
+            }
+        }
+    }
+}
+
+void TimelineView::startTrackNameEdit(int trackIndex) {
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) return;
+    
+    // Cancel any existing edit
+    if (m_editControl) {
+        cancelTrackNameEdit();
+    }
+    
+    m_editingTrackIndex = trackIndex;
+    auto& track = m_tracks[trackIndex];
+    
+    // Calculate position for edit control
+    int trackY = RULER_HEIGHT - m_scrollY;
+    for (int i = 0; i < trackIndex; ++i) {
+        trackY += m_tracks[i]->getHeight();
+    }
+    
+    // Edit control position (in client coordinates)
+    int editX = 12;
+    int editY = trackY + 6;
+    int editWidth = TRACK_HEADER_WIDTH - 45;
+    int editHeight = 20;
+    
+    // Create edit control
+    m_editControl = CreateWindowEx(
+        0,
+        L"EDIT",
+        track->getName().c_str(),
+        WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL,
+        editX, editY, editWidth, editHeight,
+        getHWND(),
+        nullptr,
+        Application::getInstance().getHInstance(),
+        nullptr
+    );
+    
+    if (m_editControl) {
+        // Create font if not already created
+        if (!m_editFont) {
+            m_editFont = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        }
+        SendMessage(m_editControl, WM_SETFONT, (WPARAM)m_editFont, TRUE);
+        
+        // Select all text
+        SendMessage(m_editControl, EM_SETSEL, 0, -1);
+        
+        // Subclass the edit control to handle Enter/Escape keys
+        SetWindowSubclass(m_editControl, EditSubclassProc, 0, reinterpret_cast<DWORD_PTR>(this));
+        
+        // Focus the edit control
+        SetFocus(m_editControl);
+    }
+}
+
+void TimelineView::commitTrackNameEdit() {
+    if (!m_editControl || m_editingTrackIndex < 0) return;
+    
+    // Get text from edit control
+    int length = GetWindowTextLength(m_editControl);
+    std::wstring newName(length + 1, L'\0');
+    GetWindowText(m_editControl, &newName[0], length + 1);
+    newName.resize(length);
+    
+    // Update track name if not empty
+    if (!newName.empty() && m_editingTrackIndex < static_cast<int>(m_tracks.size())) {
+        m_tracks[m_editingTrackIndex]->setName(newName);
+    }
+    
+    // Clean up
+    RemoveWindowSubclass(m_editControl, EditSubclassProc, 0);
+    DestroyWindow(m_editControl);
+    m_editControl = nullptr;
+    m_editingTrackIndex = -1;
+    
+    SetFocus(getHWND());
+    invalidate();
+}
+
+void TimelineView::cancelTrackNameEdit() {
+    if (!m_editControl) return;
+    
+    // Clean up without saving
+    RemoveWindowSubclass(m_editControl, EditSubclassProc, 0);
+    DestroyWindow(m_editControl);
+    m_editControl = nullptr;
+    m_editingTrackIndex = -1;
+    
+    SetFocus(getHWND());
+    invalidate();
+}
+
+LRESULT CALLBACK TimelineView::EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
+                                                  LPARAM lParam, UINT_PTR uIdSubclass,
+                                                  DWORD_PTR dwRefData) {
+    TimelineView* view = reinterpret_cast<TimelineView*>(dwRefData);
+    
+    switch (msg) {
+    case WM_KEYDOWN:
+        if (wParam == VK_RETURN) {
+            view->commitTrackNameEdit();
+            return 0;
+        }
+        else if (wParam == VK_ESCAPE) {
+            view->cancelTrackNameEdit();
+            return 0;
+        }
+        break;
+        
+    case WM_KILLFOCUS:
+        // Commit when focus is lost (clicking elsewhere)
+        view->commitTrackNameEdit();
+        return 0;
+        
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hwnd, EditSubclassProc, uIdSubclass);
+        break;
+    }
+    
+    return DefSubclassProc(hwnd, msg, wParam, lParam);
 }

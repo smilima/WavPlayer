@@ -9,6 +9,8 @@ class TimelineView : public D2DWindow {
 public:
     using PlayheadCallback = std::function<void(double)>;
 
+    ~TimelineView();
+
     void addTrack(std::shared_ptr<Track> track);
     void removeTrack(size_t index);
     const std::vector<std::shared_ptr<Track>>& getTracks() const { return m_tracks; }
@@ -48,6 +50,7 @@ protected:
     void onMouseUp(int x, int y, int button) override;
     void onMouseMove(int x, int y) override;
     void onMouseWheel(int x, int y, int delta) override;
+    void onDoubleClick(int x, int y, int button) override;
 
 private:
     void drawRuler(ID2D1RenderTarget* rt);
@@ -64,6 +67,15 @@ private:
     double snapTime(double time) const;
     int getTrackAtY(int y) const;
     void ensurePlayheadVisible();
+    
+    // Track name editing
+    void startTrackNameEdit(int trackIndex);
+    void commitTrackNameEdit();
+    void cancelTrackNameEdit();
+    bool isEditingTrackName() const { return m_editingTrackIndex >= 0; }
+    static LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, 
+                                              LPARAM lParam, UINT_PTR uIdSubclass, 
+                                              DWORD_PTR dwRefData);
 
     std::vector<std::shared_ptr<Track>> m_tracks;
     
@@ -85,6 +97,11 @@ private:
     int m_dragStartX = 0;
     int m_dragStartY = 0;
     double m_dragStartTime = 0.0;
+    
+    // Track name editing
+    HWND m_editControl = nullptr;
+    HFONT m_editFont = nullptr;
+    int m_editingTrackIndex = -1;
     
     PlayheadCallback m_onPlayheadChanged;
 };
