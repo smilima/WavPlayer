@@ -44,6 +44,18 @@ public:
     // Project name (derived from filename or "Untitled")
     std::wstring getProjectName() const;
 
+    // Check if any track has audio loaded (i.e., at least one region with a valid clip)
+    bool hasAudioLoaded() const {
+        for (const auto& track : m_tracks) {
+            for (const auto& region : track->getRegions()) {
+                if (region.clip) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // File extension
     static constexpr const wchar_t* FILE_EXTENSION = L".austd";
     static constexpr const wchar_t* FILE_FILTER = L"Audio Studio Project (*.austd)\0*.austd\0All Files (*.*)\0*.*\0";

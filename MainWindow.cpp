@@ -26,6 +26,7 @@ enum MenuID {
     ID_TRANSPORT_PLAY,
     ID_TRANSPORT_STOP,
     ID_TRANSPORT_REWIND,
+    ID_TRANSPORT_RECORD,
     ID_TRACK_ADD,
     ID_TRACK_DELETE,
     ID_VIEW_ZOOM_IN,
@@ -117,6 +118,12 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
         m_timelineView->setPlayheadPosition(0);
         m_transportBar->setPosition(0);
     });
+    m_transportBar->setRecordCallback([this]() { toggleRecording(); });
+    
+    // Set recording complete callback
+    m_audioEngine->setRecordingCallback([this](std::shared_ptr<AudioClip> clip) {
+        onRecordingComplete(clip);
+    });
 
     // Sync project to UI
     syncProjectToUI();
@@ -169,6 +176,8 @@ void MainWindow::setupMenus() {
     AppendMenu(transportMenu, MF_STRING, ID_TRANSPORT_PLAY, L"&Play/Pause\tSpace");
     AppendMenu(transportMenu, MF_STRING, ID_TRANSPORT_STOP, L"&Stop\tEnter");
     AppendMenu(transportMenu, MF_STRING, ID_TRANSPORT_REWIND, L"&Rewind\tHome");
+    AppendMenu(transportMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(transportMenu, MF_STRING, ID_TRANSPORT_RECORD, L"&Record\tR");
     AppendMenu(menuBar, MF_POPUP, (UINT_PTR)transportMenu, L"T&ransport");
     
     // View menu
@@ -221,15 +230,9 @@ void MainWindow::syncProjectToUI() {
     }
     m_transportBar->setDuration(maxDuration);
     
-    // Set the first clip for audio engine playback
-    for (const auto& track : m_project->getTracks()) {
-        for (const auto& region : track->getRegions()) {
-            if (region.clip) {
-                m_audioEngine->setClip(region.clip);
-                break;
-            }
-        }
-    }
+    // Set up audio engine for track mixing
+    m_audioEngine->setTracks(&m_project->getTracks());
+    m_audioEngine->setDuration(maxDuration);
     
     m_timelineView->invalidate();
 }
@@ -402,11 +405,15 @@ bool MainWindow::loadAudioFile(const std::wstring& filename) {
         
         tracks[0]->addRegion(region);
         
-        // Set clip for playback
-        m_audioEngine->setClip(clip);
-        
-        // Update transport with duration
-        m_transportBar->setDuration(clip->getDuration());
+        // Update duration (find max from all tracks)
+        double maxDuration = 0;
+        for (const auto& track : tracks) {
+            for (const auto& r : track->getRegions()) {
+                maxDuration = std::max(maxDuration, r.endTime());
+            }
+        }
+        m_transportBar->setDuration(maxDuration);
+        m_audioEngine->setDuration(maxDuration);
         
         m_project->setModified(true);
         updateWindowTitle();
@@ -417,9 +424,34 @@ bool MainWindow::loadAudioFile(const std::wstring& filename) {
 }
 
 void MainWindow::play() {
-    m_audioEngine->play();
-    m_transportBar->setPlaying(true);
-    m_timelineView->setFollowPlayhead(true);
+    // Ensure tracks pointer is set
+    m_audioEngine->setTracks(&m_project->getTracks());
+    
+    // Calculate total duration from all tracks and regions
+    double maxDuration = 0;
+    int regionCount = 0;
+    for (const auto& track : m_project->getTracks()) {
+        for (const auto& region : track->getRegions()) {
+            maxDuration = std::max(maxDuration, region.endTime());
+            regionCount++;
+        }
+    }
+    
+    // Debug: show what we found
+    wchar_t debug[256];
+    swprintf_s(debug, L"Tracks: %zu, Regions: %d, Duration: %.2f", 
+               m_project->getTracks().size(), regionCount, maxDuration);
+    MessageBox(m_hwnd, debug, L"Play Debug", MB_OK);
+    
+    m_audioEngine->setDuration(maxDuration);
+    m_transportBar->setDuration(maxDuration);
+    
+    if (m_audioEngine->play()) {
+        m_transportBar->setPlaying(true);
+        m_timelineView->setFollowPlayhead(true);
+    } else {
+        MessageBox(m_hwnd, L"AudioEngine::play() returned false", L"Play Failed", MB_OK);
+    }
 }
 
 void MainWindow::pause() {
@@ -428,6 +460,11 @@ void MainWindow::pause() {
 }
 
 void MainWindow::stop() {
+    // Stop recording if in progress
+    if (m_audioEngine->isRecording()) {
+        stopRecording();
+    }
+    
     m_audioEngine->stop();
     m_transportBar->setPlaying(false);
     m_transportBar->setPosition(0);
@@ -443,11 +480,144 @@ void MainWindow::togglePlayPause() {
     }
 }
 
+void MainWindow::startRecording() {
+    if (m_audioEngine->isRecording()) return;
+    
+    // Check if any track is armed
+    auto armedTrack = m_timelineView->getFirstArmedTrack();
+    if (!armedTrack) {
+        MessageBox(m_hwnd, L"No track is armed for recording.\nClick the 'R' button on a track to arm it.",
+                   L"Recording", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    
+    // Remember which track we're recording to and where
+    m_recordingTrack = armedTrack;
+    m_recordingStartPosition = m_timelineView->getPlayheadPosition();
+    
+    if (m_audioEngine->startRecording()) {
+        m_transportBar->setRecording(true);
+        m_timelineView->setFollowPlayhead(true);
+        
+        // Also start playback so we can hear what we're recording over
+        // (optional - can be controlled by user preference)
+    }
+    else {
+        m_recordingTrack = nullptr;
+        m_recordingStartPosition = 0.0;
+        MessageBox(m_hwnd, L"Failed to start recording.\nPlease check your microphone settings.",
+                   L"Recording Error", MB_OK | MB_ICONERROR);
+    }
+}
+
+void MainWindow::stopRecording() {
+    if (!m_audioEngine->isRecording()) return;
+    
+    m_audioEngine->stopRecording();
+    m_transportBar->setRecording(false);
+}
+
+void MainWindow::toggleRecording() {
+    if (m_audioEngine->isRecording()) {
+        stopRecording();
+    } else {
+        startRecording();
+    }
+}
+
+void MainWindow::onRecordingComplete(std::shared_ptr<AudioClip> clip) {
+    if (!clip || clip->getSampleCount() == 0) {
+        return;
+    }
+    
+    // Ask user where to save the recording
+    if (saveRecordedClip(clip)) {
+        // Clip was saved and will be added to project via loadAudioFile
+    }
+}
+
+bool MainWindow::saveRecordedClip(std::shared_ptr<AudioClip> clip) {
+    // Generate default filename
+    ++m_recordingCount;
+    std::wstring defaultName = L"Recording_" + std::to_wstring(m_recordingCount);
+    
+    OPENFILENAME ofn = {};
+    wchar_t filename[MAX_PATH] = {};
+    wcscpy_s(filename, defaultName.c_str());
+    
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = m_hwnd;
+    ofn.lpstrFilter = L"WAV Files (*.wav)\0*.wav\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = filename;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = L"wav";
+    ofn.lpstrTitle = L"Save Recording";
+    
+    if (!GetSaveFileName(&ofn)) {
+        m_recordingTrack = nullptr;
+        return false;
+    }
+    
+    // Save the clip
+    if (!clip->saveToFile(filename)) {
+        MessageBox(m_hwnd, L"Failed to save recording", L"Error", MB_OK | MB_ICONERROR);
+        m_recordingTrack = nullptr;
+        return false;
+    }
+    
+    // Add clip to the recording track (or first track if none specified)
+    auto targetTrack = m_recordingTrack;
+    if (!targetTrack && !m_project->getTracks().empty()) {
+        targetTrack = m_project->getTracks()[0];
+    }
+    
+    if (targetTrack) {
+        // Load clip into project cache
+        auto loadedClip = m_project->getOrLoadClip(filename);
+        if (loadedClip) {
+            TrackRegion region;
+            region.clip = loadedClip;
+            region.startTime = m_recordingStartPosition;  // Start where recording began
+            region.clipOffset = 0.0;
+            region.duration = loadedClip->getDuration();
+            
+            targetTrack->addRegion(region);
+            
+            // Update duration display
+            double maxDuration = 0.0;
+            for (const auto& t : m_project->getTracks()) {
+                for (const auto& r : t->getRegions()) {
+                    maxDuration = std::max(maxDuration, r.endTime());
+                }
+            }
+            m_transportBar->setDuration(maxDuration);
+            m_audioEngine->setDuration(maxDuration);
+            
+            m_project->setModified(true);
+            updateWindowTitle();
+            m_timelineView->invalidate();
+        }
+    }
+    
+    m_recordingTrack = nullptr;
+    m_recordingStartPosition = 0.0;
+    return true;
+}
+
 void MainWindow::updatePlaybackPosition() {
     if (m_audioEngine->isPlaying()) {
         double pos = m_audioEngine->getPosition();
         m_transportBar->setPosition(pos);
         m_timelineView->setPlayheadPosition(pos);
+    }
+    
+    // Update recording duration
+    if (m_audioEngine->isRecording()) {
+        double recordDuration = m_audioEngine->getRecordingDuration();
+        // Could display this somewhere - for now the transport shows it via position
+        m_transportBar->setPosition(recordDuration);
+        m_timelineView->setPlayheadPosition(recordDuration);
     }
 }
 
@@ -512,6 +682,10 @@ void MainWindow::onCommand(int id) {
         m_transportBar->setPosition(0);
         break;
         
+    case ID_TRANSPORT_RECORD:
+        toggleRecording();
+        break;
+        
     case ID_TRACK_ADD:
         {
             static int trackNum = 2;
@@ -519,6 +693,7 @@ void MainWindow::onCommand(int id) {
             // Cycle through colors
             uint32_t colors[] = {0xFF4A90D9, 0xFF5CB85C, 0xFFD9534F, 0xFFF0AD4E, 0xFF9B59B6};
             track->setColor(colors[(trackNum - 2) % 5]);
+            track->setVisible(true);  // Make manually added tracks visible
             m_project->addTrack(track);
             m_timelineView->addTrack(track);
             updateWindowTitle();
@@ -646,6 +821,10 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     return 0;
                 }
                 break;
+            case 'R':
+                // R key for recording (no modifier needed)
+                window->toggleRecording();
+                return 0;
             }
             break;
             

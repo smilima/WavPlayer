@@ -30,6 +30,11 @@ public:
     void pause();
     void stop();
     void togglePlayPause();
+    
+    // Recording
+    void startRecording();
+    void stopRecording();
+    void toggleRecording();
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -43,6 +48,8 @@ private:
     void syncProjectToUI();
     void syncUIToProject();
     bool promptSaveIfModified();  // Returns false if user cancels
+    void onRecordingComplete(std::shared_ptr<AudioClip> clip);
+    bool saveRecordedClip(std::shared_ptr<AudioClip> clip);
     
     HWND m_hwnd = nullptr;
     UINT_PTR m_timerId = 0;
@@ -51,4 +58,8 @@ private:
     std::unique_ptr<TimelineView> m_timelineView;
     std::unique_ptr<AudioEngine> m_audioEngine;
     std::unique_ptr<Project> m_project;
+    
+    int m_recordingCount = 0;  // Counter for auto-naming recordings
+    std::shared_ptr<Track> m_recordingTrack;  // Track that was armed when recording started
+    double m_recordingStartPosition = 0.0;  // Playhead position when recording started
 };

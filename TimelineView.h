@@ -14,6 +14,12 @@ public:
     void addTrack(std::shared_ptr<Track> track);
     void removeTrack(size_t index);
     const std::vector<std::shared_ptr<Track>>& getTracks() const { return m_tracks; }
+    
+    // Check if any track is armed for recording
+    bool hasArmedTrack() const;
+    
+    // Get first armed track (for recording)
+    std::shared_ptr<Track> getFirstArmedTrack() const;
 
     // Playhead
     void setPlayheadPosition(double seconds);
@@ -67,6 +73,11 @@ private:
     double snapTime(double time) const;
     int getTrackAtY(int y) const;
     void ensurePlayheadVisible();
+    
+    // Track header button handling
+    enum class TrackButton { None, Mute, Solo, Arm };
+    TrackButton getButtonAtPosition(int trackIndex, int x, int y) const;
+    int getTrackYPosition(int trackIndex) const;
     
     // Track name editing
     void startTrackNameEdit(int trackIndex);

@@ -31,6 +31,24 @@ void TimelineView::removeTrack(size_t index) {
     }
 }
 
+bool TimelineView::hasArmedTrack() const {
+    for (const auto& track : m_tracks) {
+        if (track->isArmed() && track->isVisible()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::shared_ptr<Track> TimelineView::getFirstArmedTrack() const {
+    for (const auto& track : m_tracks) {
+        if (track->isArmed() && track->isVisible()) {
+            return track;
+        }
+    }
+    return nullptr;
+}
+
 void TimelineView::setPlayheadPosition(double seconds) {
     m_playheadPosition = std::max(0.0, seconds);
     
@@ -100,9 +118,12 @@ void TimelineView::onRender(ID2D1RenderTarget* rt) {
     fillRect(0, 0, TRACK_HEADER_WIDTH, static_cast<float>(getHeight()), 
              DAWColors::TrackHeader);
     
-    // Redraw track headers on top
-    float y = RULER_HEIGHT - m_scrollY;
+    // Redraw track headers on top (only for visible tracks)
+    float y = (float)(RULER_HEIGHT - m_scrollY);
     for (auto& track : m_tracks) {
+        // Skip tracks that aren't visible
+        if (!track->isVisible()) continue;
+        
         if (y + track->getHeight() > RULER_HEIGHT && y < getHeight()) {
             drawTrackHeader(rt, *track, y, static_cast<float>(track->getHeight()));
         }
@@ -202,9 +223,14 @@ void TimelineView::drawGrid(ID2D1RenderTarget* rt) {
 
 void TimelineView::drawTracks(ID2D1RenderTarget* rt) {
     float y = static_cast<float>(RULER_HEIGHT - m_scrollY);
+    int visibleTrackIndex = 0;  // Count only visible tracks for alternating colors
     
     for (size_t i = 0; i < m_tracks.size(); ++i) {
         auto& track = m_tracks[i];
+        
+        // Skip tracks that aren't visible
+        if (!track->isVisible()) continue;
+        
         float height = static_cast<float>(track->getHeight());
         
         if (y + height > RULER_HEIGHT && y < getHeight()) {
@@ -212,8 +238,8 @@ void TimelineView::drawTracks(ID2D1RenderTarget* rt) {
             float contentX = static_cast<float>(TRACK_HEADER_WIDTH);
             float contentWidth = static_cast<float>(getWidth() - TRACK_HEADER_WIDTH);
             
-            // Alternate track colors
-            Color bgColor = (i % 2 == 0) ? DAWColors::TrackBackground : 
+            // Alternate track colors based on visible track index
+            Color bgColor = (visibleTrackIndex % 2 == 0) ? DAWColors::TrackBackground : 
                             Color(DAWColors::TrackBackground.r * 1.1f,
                                   DAWColors::TrackBackground.g * 1.1f,
                                   DAWColors::TrackBackground.b * 1.1f);
@@ -229,6 +255,7 @@ void TimelineView::drawTracks(ID2D1RenderTarget* rt) {
         }
         
         y += height;
+        ++visibleTrackIndex;
     }
 }
 
@@ -410,6 +437,9 @@ int TimelineView::getTrackAtY(int y) const {
     
     int trackY = RULER_HEIGHT - m_scrollY;
     for (size_t i = 0; i < m_tracks.size(); ++i) {
+        // Skip tracks that aren't visible
+        if (!m_tracks[i]->isVisible()) continue;
+        
         int trackHeight = m_tracks[i]->getHeight();
         if (y >= trackY && y < trackY + trackHeight) {
             return static_cast<int>(i);
@@ -417,6 +447,55 @@ int TimelineView::getTrackAtY(int y) const {
         trackY += trackHeight;
     }
     return -1;
+}
+
+int TimelineView::getTrackYPosition(int trackIndex) const {
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) return -1;
+    
+    int trackY = RULER_HEIGHT - m_scrollY;
+    for (int i = 0; i < trackIndex; ++i) {
+        // Skip non-visible tracks
+        if (!m_tracks[i]->isVisible()) continue;
+        trackY += m_tracks[i]->getHeight();
+    }
+    return trackY;
+}
+
+TimelineView::TrackButton TimelineView::getButtonAtPosition(int trackIndex, int x, int y) const {
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) {
+        return TrackButton::None;
+    }
+    
+    // Button layout constants (must match drawTrackHeader)
+    constexpr float btnSize = 20;
+    constexpr float btnSpacing = 4;
+    constexpr float btnStartX = 12;
+    
+    int trackY = getTrackYPosition(trackIndex);
+    int trackHeight = m_tracks[trackIndex]->getHeight();
+    int btnY = trackY + trackHeight - 28;
+    
+    // Check if y is in button row
+    if (y < btnY || y > btnY + btnSize) {
+        return TrackButton::None;
+    }
+    
+    // Check which button (if any)
+    float muteX = btnStartX;
+    float soloX = muteX + btnSize + btnSpacing;
+    float armX = soloX + btnSize + btnSpacing;
+    
+    if (x >= muteX && x < muteX + btnSize) {
+        return TrackButton::Mute;
+    }
+    if (x >= soloX && x < soloX + btnSize) {
+        return TrackButton::Solo;
+    }
+    if (x >= armX && x < armX + btnSize) {
+        return TrackButton::Arm;
+    }
+    
+    return TrackButton::None;
 }
 
 void TimelineView::onResize(int width, int height) {
@@ -439,7 +518,22 @@ void TimelineView::onMouseDown(int x, int y, int button) {
             int track = getTrackAtY(y);
             if (track >= 0) {
                 m_selectedTrack = track;
-                // TODO: Handle mute/solo/arm button clicks
+                
+                // Check for button clicks
+                TrackButton btn = getButtonAtPosition(track, x, y);
+                switch (btn) {
+                    case TrackButton::Mute:
+                        m_tracks[track]->setMuted(!m_tracks[track]->isMuted());
+                        break;
+                    case TrackButton::Solo:
+                        m_tracks[track]->setSolo(!m_tracks[track]->isSolo());
+                        break;
+                    case TrackButton::Arm:
+                        m_tracks[track]->setArmed(!m_tracks[track]->isArmed());
+                        break;
+                    default:
+                        break;
+                }
             }
         }
         else {
@@ -508,6 +602,8 @@ void TimelineView::onDoubleClick(int x, int y, int button) {
             // Check if click is in the name area (top portion of track header)
             int trackY = RULER_HEIGHT - m_scrollY;
             for (int i = 0; i < trackIndex; ++i) {
+                // Skip non-visible tracks when calculating Y position
+                if (!m_tracks[i]->isVisible()) continue;
                 trackY += m_tracks[i]->getHeight();
             }
             
@@ -523,6 +619,9 @@ void TimelineView::onDoubleClick(int x, int y, int button) {
 void TimelineView::startTrackNameEdit(int trackIndex) {
     if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) return;
     
+    // Don't allow editing non-visible tracks
+    if (!m_tracks[trackIndex]->isVisible()) return;
+    
     // Cancel any existing edit
     if (m_editControl) {
         cancelTrackNameEdit();
@@ -531,9 +630,11 @@ void TimelineView::startTrackNameEdit(int trackIndex) {
     m_editingTrackIndex = trackIndex;
     auto& track = m_tracks[trackIndex];
     
-    // Calculate position for edit control
+    // Calculate position for edit control (skip non-visible tracks)
     int trackY = RULER_HEIGHT - m_scrollY;
     for (int i = 0; i < trackIndex; ++i) {
+        // Skip non-visible tracks when calculating Y position
+        if (!m_tracks[i]->isVisible()) continue;
         trackY += m_tracks[i]->getHeight();
     }
     

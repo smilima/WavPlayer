@@ -12,23 +12,27 @@ public:
     void setPauseCallback(Callback cb) { m_onPause = cb; }
     void setRewindCallback(Callback cb) { m_onRewind = cb; }
     void setFastForwardCallback(Callback cb) { m_onFastForward = cb; }
+    void setRecordCallback(Callback cb) { m_onRecord = cb; }
 
     void setPlaying(bool playing) { m_isPlaying = playing; invalidate(); }
+    void setRecording(bool recording) { m_isRecording = recording; invalidate(); }
+    bool isRecording() const { return m_isRecording; }
     void setPosition(double seconds);
     void setDuration(double seconds);
     void setBPM(double bpm) { m_bpm = bpm; invalidate(); }
+    void setHasAudioLoaded(bool loaded) { m_hasAudioLoaded = loaded; }
 
 protected:
     void onRender(ID2D1RenderTarget* rt) override;
+    void onResize(int width, int height) override;
     void onMouseDown(int x, int y, int button) override;
     void onMouseUp(int x, int y, int button) override;
     void onMouseMove(int x, int y) override;
-    void onResize(int width, int height) override;
 
 private:
     struct Button {
         float x, y, w, h;
-        enum Type { Play, Stop, Pause, Rewind, FastForward } type;
+        enum Type { Play, Stop, Pause, Rewind, FastForward, Record } type;
         bool hovered = false;
         bool pressed = false;
     };
@@ -40,6 +44,7 @@ private:
     void drawStopIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
     void drawRewindIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
     void drawFastForwardIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
+    void drawRecordIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
     
     std::wstring formatTime(double seconds);
 
@@ -47,6 +52,7 @@ private:
     bool m_buttonsInitialized = false;
 
     bool m_isPlaying = false;
+    bool m_isRecording = false;
     double m_position = 0.0;
     double m_duration = 0.0;
     double m_bpm = 120.0;
@@ -56,4 +62,7 @@ private:
     Callback m_onPause;
     Callback m_onRewind;
     Callback m_onFastForward;
+    Callback m_onRecord;
+
+    bool m_hasAudioLoaded = false;  // Tracks if audio is loaded in the project
 };

@@ -124,6 +124,7 @@ std::wstring Project::serializeProject() const {
         ss << L"Muted=" << (track->isMuted() ? 1 : 0) << L"\n";
         ss << L"Solo=" << (track->isSolo() ? 1 : 0) << L"\n";
         ss << L"Armed=" << (track->isArmed() ? 1 : 0) << L"\n";
+        ss << L"Visible=" << (track->isVisible() ? 1 : 0) << L"\n";
         ss << L"Height=" << track->getHeight() << L"\n";
         ss << L"\n";
         
@@ -202,6 +203,9 @@ bool Project::parseProjectFile(const std::wstring& content) {
             }
             if (sectionData.count(L"Armed")) {
                 track->setArmed(sectionData[L"Armed"] == L"1");
+            }
+            if (sectionData.count(L"Visible")) {
+                track->setVisible(sectionData[L"Visible"] == L"1");
             }
             if (sectionData.count(L"Height")) {
                 track->setHeight(std::stoi(sectionData[L"Height"]));

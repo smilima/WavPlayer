@@ -34,13 +34,17 @@ void TransportBar::layoutButtons() {
     m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Stop});
     startX += btnSize + spacing;
     
-    // Play/Pause
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, 
-                         m_isPlaying ? Button::Pause : Button::Play});
+    // Play/Pause - only show Pause if playing AND audio is loaded
+    Button::Type playType = (m_isPlaying && m_hasAudioLoaded) ? Button::Pause : Button::Play;
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, playType});
     startX += btnSize + spacing;
     
     // Fast Forward
     m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FastForward});
+    startX += btnSize + spacing;
+    
+    // Record
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Record});
     
     m_buttonsInitialized = true;
 }
@@ -62,8 +66,8 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
         drawButton(rt, btn);
     }
     
-    // Time display
-    float timeX = 200.0f;
+    // Time display ****************************************************8
+    float timeX = 250.0f;
     float timeY = static_cast<float>(getHeight()) / 2.0f - 10.0f;
     
     // Current position
@@ -111,6 +115,9 @@ void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
             break;
         case Button::FastForward:
             drawFastForwardIcon(rt, cx, cy, iconSize);
+            break;
+        case Button::Record:
+            drawRecordIcon(rt, cx, cy, iconSize);
             break;
     }
 }
@@ -228,6 +235,21 @@ void TransportBar::drawFastForwardIcon(ID2D1RenderTarget* rt, float cx, float cy
     }
 }
 
+void TransportBar::drawRecordIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    // Red circle for record
+    D2D1_ELLIPSE ellipse = D2D1::Ellipse(D2D1::Point2F(cx, cy), size * 0.6f, size * 0.6f);
+    
+    if (m_isRecording) {
+        // Bright red when recording
+        getBrush()->SetColor(D2D1::ColorF(0.95f, 0.2f, 0.2f));
+    } else {
+        // Darker red when not recording
+        getBrush()->SetColor(D2D1::ColorF(0.7f, 0.2f, 0.2f));
+    }
+    
+    rt->FillEllipse(ellipse, getBrush());
+}
+
 void TransportBar::onMouseDown(int x, int y, int button) {
     if (button != 0) return;
     
@@ -251,30 +273,34 @@ void TransportBar::onMouseUp(int x, int y, int button) {
             // Check if still over button (click completed)
             if (x >= btn.x && x <= btn.x + btn.w &&
                 y >= btn.y && y <= btn.y + btn.h) {
-                switch (btn.type) {
-                    case Button::Play:
-                        if (m_onPlay) m_onPlay();
-                        break;
-                    case Button::Pause:
-                        if (m_onPause) m_onPause();
-                        break;
-                    case Button::Stop:
-                        if (m_onStop) m_onStop();
-                        break;
-                    case Button::Rewind:
-                        if (m_onRewind) m_onRewind();
-                        break;
-                    case Button::FastForward:
-                        if (m_onFastForward) m_onFastForward();
-                        break;
-                }
-            }
-        }
-    }
-    
-    layoutButtons();  // Refresh play/pause state
-    invalidate();
-}
+                   switch (btn.type) {
+                       case Button::Play:
+                           // Only play if audio is loaded
+                           if (m_hasAudioLoaded && m_onPlay) m_onPlay();
+                           break;
+                       case Button::Pause:
+                           if (m_onPause) m_onPause();
+                           break;
+                       case Button::Stop:
+                           if (m_onStop) m_onStop();
+                           break;
+                       case Button::Rewind:
+                           if (m_onRewind) m_onRewind();
+                           break;
+                       case Button::FastForward:
+                           if (m_onFastForward) m_onFastForward();
+                           break;
+                       case Button::Record:
+                           if (m_onRecord) m_onRecord();
+                           break;
+                   }
+               }
+           }
+       }
+       
+       layoutButtons();  // Refresh play/pause state
+       invalidate();
+   }
 
 void TransportBar::onMouseMove(int x, int y) {
     bool needsRedraw = false;

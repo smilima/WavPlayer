@@ -35,6 +35,10 @@ public:
     
     bool isArmed() const { return m_armed; }
     void setArmed(bool armed) { m_armed = armed; }
+    
+    // Visibility - track is visible if explicitly shown OR has regions
+    bool isVisible() const { return m_visible || !m_regions.empty(); }
+    void setVisible(bool visible) { m_visible = visible; }
 
     // Visual properties
     int getHeight() const { return m_height; }
@@ -60,6 +64,7 @@ private:
     bool m_muted = false;
     bool m_solo = false;
     bool m_armed = false;
+    bool m_visible = false;  // Explicitly visible even without regions
     
     int m_height = 100;
     uint32_t m_color = 0xFF4A90D9;  // Default blue color (ARGB)
