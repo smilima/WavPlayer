@@ -20,26 +20,3 @@ StartTime=0.000000
 ClipOffset=0.000000
 Duration=202.436984
 
-[Track:1]
-Name=Track 2
-Color=FF5CB85C
-Volume=1.000000
-Pan=0.000000
-Muted=0
-Solo=0
-Armed=0
-Visible=1
-Height=100
-
-[Region:1:0]
-ClipPath=C:\Users\andre\OneDrive\Documents\Code\WavPlayer\BNL_Track2_Take1.wav
-StartTime=0.000000
-ClipOffset=0.000000
-Duration=4.089297
-
-[Region:1:1]
-ClipPath=C:\Users\andre\OneDrive\Documents\Code\WavPlayer\BNL_Track2_Take2.wav
-StartTime=7.938696
-ClipOffset=0.000000
-Duration=3.210000
-

@@ -6,6 +6,8 @@
 #include "Project.h"
 #include <memory>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 class MainWindow {
 public:
@@ -48,10 +50,33 @@ private:
     void updateWindowTitle();
     void syncProjectToUI();
     void syncUIToProject();
-    bool promptSaveIfModified();  // Returns false if user cancels
+    bool promptSaveIfModified();
     void onRecordingComplete(std::shared_ptr<AudioClip> clip);
-    bool saveRecordedClip(std::shared_ptr<AudioClip> clip);  // Keep for manual save if needed
-    bool autoSaveRecordedClip(std::shared_ptr<AudioClip> clip);  // Auto-save without dialog
+    bool saveRecordedClip(std::shared_ptr<AudioClip> clip);
+    bool autoSaveRecordedClip(std::shared_ptr<AudioClip> clip);
+
+    bool registerWindowClass() const;
+    bool createNativeWindow(const wchar_t* title, int width, int height);
+    bool initializeAudioEngine();
+    void createChildViews();
+    void configureTimelineCallbacks();
+    void configureTransportCallbacks();
+    void configureAudioCallbacks();
+    void startPlaybackTimer();
+    void stopPlaybackTimer();
+    void ensureAudioEngineTracks();
+    double calculateProjectDuration() const;
+    void applyProjectDuration(double duration);
+    void refreshProjectDuration();
+    void resetPlaybackToStart();
+    void addDefaultTrack();
+    void resetTrackNumbering();
+    void markProjectModified();
+    void handleTrackAdd();
+    void handleTrackDelete();
+    bool shouldDeleteTrackAudio(const std::shared_ptr<Track>& track,
+        std::vector<std::wstring>& filesToDelete) const;
+    void deleteAudioFiles(const std::vector<std::wstring>& filesToDelete);
     
     HWND m_hwnd = nullptr;
     UINT_PTR m_timerId = 0;
@@ -60,9 +85,10 @@ private:
     std::unique_ptr<TimelineView> m_timelineView;
     std::unique_ptr<AudioEngine> m_audioEngine;
     std::unique_ptr<Project> m_project;
-    
-    int m_recordingCount = 0;  // Counter for auto-naming recordings
-    int m_recordingTrackIndex = -1;  // Track number (1-based) for recording filename
-    std::shared_ptr<Track> m_recordingTrack;  // Track that was armed when recording started
-    double m_recordingStartPosition = 0.0;  // Playhead position when recording started (punch-in point)
+
+    int m_nextTrackNumber = 2;
+    int m_recordingCount = 0;
+    int m_recordingTrackIndex = -1;
+    std::shared_ptr<Track> m_recordingTrack;
+    double m_recordingStartPosition = 0.0;
 };
