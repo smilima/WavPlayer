@@ -27,26 +27,81 @@ void TimelineView::addTrack(std::shared_ptr<Track> track) {
 void TimelineView::removeTrack(size_t index) {
     if (index < m_tracks.size()) {
         m_tracks.erase(m_tracks.begin() + index);
+
+        if (m_selectedTrack == static_cast<int>(index)) {
+            m_selectedTrack = -1;
+            m_selectedRegion = -1;
+        }
+        else if (m_selectedTrack > static_cast<int>(index)) {
+            --m_selectedTrack;
+        }
+
         invalidate();
     }
 }
 
-bool TimelineView::hasArmedTrack() const {
-    for (const auto& track : m_tracks) {
-        if (track->isArmed() && track->isVisible()) {
-            return true;
-        }
+void TimelineView::setTimelineDuration(double duration) {
+    m_timelineDuration = std::max(0.0, duration);
+    double clamped = std::min(m_scrollX, getMaxScrollX());
+    if (std::abs(clamped - m_scrollX) > 1e-6) {
+        m_scrollX = clamped;
+        invalidate();
     }
-    return false;
+    updateScrollMetrics();
+    syncScrollBarPosition();
 }
 
-std::shared_ptr<Track> TimelineView::getFirstArmedTrack() const {
-    for (const auto& track : m_tracks) {
-        if (track->isArmed() && track->isVisible()) {
-            return track;
+void TimelineView::setSelectedTrackIndex(int index) {
+    int clampedIndex = (index >= 0 && index < static_cast<int>(m_tracks.size())) ? index : -1;
+
+    if (clampedIndex != m_selectedTrack) {
+        m_selectedTrack = clampedIndex;
+        if (clampedIndex == -1) {
+            m_selectedRegion = -1;
+        }
+        invalidate();
+    }
+    else if (clampedIndex >= 0) {
+        const auto& regions = m_tracks[clampedIndex]->getRegions();
+        if (m_selectedRegion >= static_cast<int>(regions.size())) {
+            m_selectedRegion = -1;
+            invalidate();
         }
     }
-    return nullptr;
+}
+
+void TimelineView::setSelectedRegion(int trackIndex, int regionIndex) {
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) {
+        if (m_selectedTrack != -1 || m_selectedRegion != -1) {
+            m_selectedTrack = -1;
+            m_selectedRegion = -1;
+            invalidate();
+        }
+        return;
+    }
+
+    const auto& regions = m_tracks[trackIndex]->getRegions();
+    if (regionIndex < 0 || regionIndex >= static_cast<int>(regions.size())) {
+        if (m_selectedTrack != trackIndex || m_selectedRegion != -1) {
+            m_selectedTrack = trackIndex;
+            m_selectedRegion = -1;
+            invalidate();
+        }
+        return;
+    }
+
+    if (m_selectedTrack != trackIndex || m_selectedRegion != regionIndex) {
+        m_selectedTrack = trackIndex;
+        m_selectedRegion = regionIndex;
+        invalidate();
+    }
+}
+
+void TimelineView::clearRegionSelection() {
+    if (m_selectedRegion != -1) {
+        m_selectedRegion = -1;
+        invalidate();
+    }
 }
 
 void TimelineView::setPlayheadPosition(double seconds) {
@@ -71,23 +126,31 @@ void TimelineView::ensurePlayheadVisible() {
     if (playheadPixel > rightMargin) {
         // Playhead went past right edge - scroll so playhead is at 25% from left
         double targetScrollX = m_playheadPosition - (contentWidth * 0.25) / m_pixelsPerSecond;
-        m_scrollX = std::max(0.0, targetScrollX);
+        setScrollX(targetScrollX);
     }
     else if (playheadPixel < leftMargin && m_scrollX > 0) {
         // Playhead went past left edge (e.g., when rewinding) - scroll to show it
         double targetScrollX = m_playheadPosition - (contentWidth * 0.25) / m_pixelsPerSecond;
-        m_scrollX = std::max(0.0, targetScrollX);
+        setScrollX(targetScrollX);
     }
 }
 
 void TimelineView::setPixelsPerSecond(double pps) {
     m_pixelsPerSecond = std::clamp(pps, 10.0, 1000.0);
+    setScrollX(m_scrollX);
+    updateScrollMetrics();
     invalidate();
 }
 
 void TimelineView::setScrollX(double x) {
-    m_scrollX = std::max(0.0, x);
-    invalidate();
+    double maxScroll = getMaxScrollX();
+    double clamped = std::clamp(x, 0.0, maxScroll);
+    bool changed = std::abs(clamped - m_scrollX) > 1e-6;
+    m_scrollX = clamped;
+    syncScrollBarPosition();
+    if (changed) {
+        invalidate();
+    }
 }
 
 void TimelineView::setScrollY(int y) {
@@ -250,7 +313,7 @@ void TimelineView::drawTracks(ID2D1RenderTarget* rt) {
             fillRect(contentX, y, contentWidth, height, bgColor);
 
             // Draw track content (regions/waveforms)
-            drawTrackContent(rt, *track, y, height);
+            drawTrackContent(rt, *track, y, height, i);
 
             // Track separator line
             drawLine(0, y + height, static_cast<float>(getWidth()), y + height,
@@ -323,16 +386,19 @@ void TimelineView::drawTrackHeader(ID2D1RenderTarget* rt, Track& track,
 }
 
 void TimelineView::drawTrackContent(ID2D1RenderTarget* rt, Track& track,
-    float y, float height) {
+    float y, float height, size_t trackIndex) {
     Color trackColor(track.getColor());
+    const auto& regions = track.getRegions();
 
-    for (const auto& region : track.getRegions()) {
-        drawWaveform(rt, region, y, height, trackColor);
+    for (size_t regionIndex = 0; regionIndex < regions.size(); ++regionIndex) {
+        bool isSelected = (static_cast<int>(trackIndex) == m_selectedTrack) &&
+            (static_cast<int>(regionIndex) == m_selectedRegion);
+        drawWaveform(rt, regions[regionIndex], y, height, trackColor, isSelected);
     }
 }
 
 void TimelineView::drawWaveform(ID2D1RenderTarget* rt, const TrackRegion& region,
-    float trackY, float trackHeight, const Color& color) {
+    float trackY, float trackHeight, const Color& color, bool isSelected) {
     if (!region.clip) return;
 
     int startX = timeToPixel(region.startTime);
@@ -352,13 +418,21 @@ void TimelineView::drawWaveform(ID2D1RenderTarget* rt, const TrackRegion& region
         static_cast<float>(endX - startX), regionHeight,
         Color(color.r * 0.3f, color.g * 0.3f, color.b * 0.3f, 0.8f));
 
-    // Region border
+    if (isSelected) {
+        Color overlay(DAWColors::Selection.r, DAWColors::Selection.g, DAWColors::Selection.b, 0.35f);
+        fillRect(static_cast<float>(startX), regionY,
+            static_cast<float>(endX - startX), regionHeight,
+            overlay);
+    }
+
+    Color borderColor = isSelected ? DAWColors::Selection : color;
+    float borderWidth = isSelected ? 2.0f : 1.0f;
+
     drawRect(static_cast<float>(startX), regionY,
         static_cast<float>(endX - startX), regionHeight,
-        color, 1.0f);
+        borderColor, borderWidth);
 
     // Calculate the time range we need to display
-    // visibleStart/visibleEnd are in pixels, convert to time within the clip
     double visibleStartTime = pixelToTime(visibleStart);
     double visibleEndTime = pixelToTime(visibleEnd);
 
@@ -511,10 +585,26 @@ TimelineView::TrackButton TimelineView::getButtonAtPosition(int trackIndex, int 
 }
 
 void TimelineView::onResize(int width, int height) {
+    updateScrollMetrics();
+    setScrollX(m_scrollX);
     invalidate();
 }
 
 void TimelineView::onMouseDown(int x, int y, int button) {
+    if (button == 1) {
+        if (x >= TRACK_HEADER_WIDTH) {
+            int track = getTrackAtY(y);
+            if (track >= 0) {
+                int regionIndex = hitTestRegion(track, x, y);
+                if (regionIndex >= 0) {
+                    setSelectedRegion(track, regionIndex);
+                    showRegionContextMenu(x, y);
+                }
+            }
+        }
+        return;
+    }
+
     if (button == 0) {
         if (y < RULER_HEIGHT && x >= TRACK_HEADER_WIDTH) {
             // Click on ruler - move playhead
@@ -529,7 +619,8 @@ void TimelineView::onMouseDown(int x, int y, int button) {
             // Click on track header
             int track = getTrackAtY(y);
             if (track >= 0) {
-                m_selectedTrack = track;
+                setSelectedTrackIndex(track);
+                clearRegionSelection();
 
                 // Check for button clicks
                 TrackButton btn = getButtonAtPosition(track, x, y);
@@ -547,10 +638,28 @@ void TimelineView::onMouseDown(int x, int y, int button) {
                     break;
                 }
             }
+            else {
+                setSelectedTrackIndex(-1);
+                clearRegionSelection();
+            }
         }
         else {
             // Click on track content area
-            m_selectedTrack = getTrackAtY(y);
+            int track = getTrackAtY(y);
+            if (track >= 0) {
+                int regionIndex = hitTestRegion(track, x, y);
+                if (regionIndex >= 0) {
+                    setSelectedRegion(track, regionIndex);
+                }
+                else {
+                    setSelectedTrackIndex(track);
+                    clearRegionSelection();
+                }
+            }
+            else {
+                setSelectedTrackIndex(-1);
+                clearRegionSelection();
+            }
         }
     }
 
@@ -581,27 +690,25 @@ void TimelineView::onMouseWheel(int x, int y, int delta) {
         double zoomFactor = (delta > 0) ? 1.2 : 0.8;
         double mouseTime = pixelToTime(x);
 
-        m_pixelsPerSecond = std::clamp(m_pixelsPerSecond * zoomFactor, 10.0, 1000.0);
-
+        double newPps = std::clamp(m_pixelsPerSecond * zoomFactor, 10.0, 1000.0);
+        setPixelsPerSecond(newPps);
         // Keep mouse position at same time after zoom
-        m_scrollX = mouseTime - (x - TRACK_HEADER_WIDTH) / m_pixelsPerSecond;
-        m_scrollX = std::max(0.0, m_scrollX);
-    }
-    else {
-        // Normal wheel = scroll
-        if (GetKeyState(VK_SHIFT) & 0x8000) {
-            // Horizontal scroll - disable follow mode when user manually scrolls
-            m_followPlayhead = false;
-            m_scrollX -= delta / 120.0 * 50 / m_pixelsPerSecond;
-            m_scrollX = std::max(0.0, m_scrollX);
-        }
-        else {
-            // Vertical scroll
-            m_scrollY -= delta / 120 * 30;
-            m_scrollY = std::max(0, m_scrollY);
-        }
-    }
-    invalidate();
+        setScrollX(mouseTime - (x - TRACK_HEADER_WIDTH) / m_pixelsPerSecond);
+     }
+     else {
+         // Normal wheel = scroll
+         if (GetKeyState(VK_SHIFT) & 0x8000) {
+             // Horizontal scroll - disable follow mode when user manually scrolls
+             m_followPlayhead = false;
+            setScrollX(m_scrollX - delta / 120.0 * 50 / m_pixelsPerSecond);
+         }
+         else {
+             // Vertical scroll
+             m_scrollY -= delta / 120 * 30;
+             m_scrollY = std::max(0, m_scrollY);
+         }
+     }
+     invalidate();
 }
 
 void TimelineView::onDoubleClick(int x, int y, int button) {
@@ -754,4 +861,215 @@ LRESULT CALLBACK TimelineView::EditSubclassProc(HWND hwnd, UINT msg, WPARAM wPar
     }
 
     return DefSubclassProc(hwnd, msg, wParam, lParam);
+}
+
+int TimelineView::hitTestRegion(int trackIndex, int x, int y) const {
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) {
+        return -1;
+    }
+
+    if (x < TRACK_HEADER_WIDTH) {
+        return -1;
+    }
+
+    auto track = m_tracks[trackIndex];
+    if (!track || !track->isVisible()) {
+        return -1;
+    }
+
+    int trackY = getTrackYPosition(trackIndex);
+    if (trackY < 0) {
+        return -1;
+    }
+
+    float regionY = static_cast<float>(trackY) + 4.0f;
+    float regionHeight = static_cast<float>(track->getHeight()) - 8.0f;
+    if (y < regionY || y > regionY + regionHeight) {
+        return -1;
+    }
+
+    double time = pixelToTime(x);
+    const auto& regions = track->getRegions();
+    for (size_t i = 0; i < regions.size(); ++i) {
+        const auto& region = regions[i];
+        if (time >= region.startTime && time <= region.endTime()) {
+            return static_cast<int>(i);
+        }
+    }
+
+    return -1;
+}
+
+void TimelineView::showRegionContextMenu(int x, int y) {
+    if (m_selectedTrack < 0 || m_selectedTrack >= static_cast<int>(m_tracks.size())) {
+        return;
+    }
+    if (m_selectedRegion < 0) {
+        return;
+    }
+
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return;
+    }
+
+    constexpr UINT ID_DELETE_REGION = 1;
+    AppendMenu(menu, MF_STRING, ID_DELETE_REGION, L"Delete Region");
+
+    POINT pt{};
+    pt.x = static_cast<LONG>(dipsToPixelsX(static_cast<float>(x)));
+    pt.y = static_cast<LONG>(dipsToPixelsY(static_cast<float>(y)));
+    ClientToScreen(getHWND(), &pt);
+
+    UINT command = TrackPopupMenu(menu,
+        TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_TOPALIGN | TPM_LEFTALIGN,
+        pt.x, pt.y, 0, getHWND(), nullptr);
+
+    DestroyMenu(menu);
+
+    if (command == ID_DELETE_REGION) {
+        deleteSelectedRegion();
+    }
+}
+
+bool TimelineView::deleteSelectedRegion() {
+    if (m_selectedTrack < 0 || m_selectedTrack >= static_cast<int>(m_tracks.size())) {
+        return false;
+    }
+
+    auto track = m_tracks[m_selectedTrack];
+    if (!track) {
+        return false;
+    }
+
+    if (m_selectedRegion < 0 ||
+        m_selectedRegion >= static_cast<int>(track->getRegions().size())) {
+        return false;
+    }
+
+    track->removeRegion(static_cast<size_t>(m_selectedRegion));
+    m_selectedRegion = -1;
+    invalidate();
+
+    if (m_onRegionChanged) {
+        m_onRegionChanged();
+    }
+
+    return true;
+}
+
+void TimelineView::updateScrollMetrics() {
+    HWND hwnd = getHWND();
+    if (!hwnd) {
+        return;
+    }
+
+    int viewWidth = std::max(0, getWidth() - TRACK_HEADER_WIDTH);
+    int contentWidth = static_cast<int>(std::ceil(m_timelineDuration * m_pixelsPerSecond));
+
+    SCROLLINFO si{};
+    si.cbSize = sizeof(si);
+    si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    si.nMin = 0;
+    si.nPage = std::max(0, viewWidth);
+
+    if (viewWidth <= 0 || contentWidth <= viewWidth) {
+        ShowScrollBar(hwnd, SB_HORZ, FALSE);
+        si.nMax = viewWidth;
+        si.nPos = 0;
+        SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+        if (m_scrollX != 0.0) {
+            m_scrollX = 0.0;
+            invalidate();
+        }
+        return;
+    }
+
+    ShowScrollBar(hwnd, SB_HORZ, TRUE);
+    si.nMax = contentWidth;
+    si.nPos = static_cast<int>(m_scrollX * m_pixelsPerSecond);
+    SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+}
+
+void TimelineView::syncScrollBarPosition() {
+    HWND hwnd = getHWND();
+    if (!hwnd) {
+        return;
+    }
+
+    SCROLLINFO si{};
+    si.cbSize = sizeof(si);
+    si.fMask = SIF_POS;
+    si.nPos = static_cast<int>(m_scrollX * m_pixelsPerSecond);
+    SetScrollInfo(hwnd, SB_HORZ, &si, TRUE);
+}
+
+double TimelineView::getMaxScrollX() const {
+    int viewWidth = std::max(0, getWidth() - TRACK_HEADER_WIDTH);
+    if (viewWidth <= 0 || m_pixelsPerSecond <= 0.0) {
+        return 0.0;
+    }
+    double visibleSeconds = static_cast<double>(viewWidth) / m_pixelsPerSecond;
+    return std::max(0.0, m_timelineDuration - visibleSeconds);
+}
+
+void TimelineView::onHScroll(int request, int /*pos*/) {
+    if (m_pixelsPerSecond <= 0.0) {
+        return;
+    }
+
+    SCROLLINFO si{};
+    si.cbSize = sizeof(si);
+    si.fMask = SIF_ALL;
+    if (!GetScrollInfo(getHWND(), SB_HORZ, &si)) {
+        return;
+    }
+
+    double newScroll = m_scrollX;
+    const double lineStep = 50.0 / m_pixelsPerSecond;
+    const double pageStep = static_cast<double>(std::max(1, getWidth() - TRACK_HEADER_WIDTH)) / m_pixelsPerSecond;
+
+    switch (request) {
+    case SB_LINELEFT:
+        newScroll -= lineStep;
+        break;
+    case SB_LINERIGHT:
+        newScroll += lineStep;
+        break;
+    case SB_PAGELEFT:
+        newScroll -= pageStep;
+        break;
+    case SB_PAGERIGHT:
+        newScroll += pageStep;
+        break;
+    case SB_THUMBTRACK:
+    case SB_THUMBPOSITION:
+        newScroll = si.nTrackPos / m_pixelsPerSecond;
+        break;
+    case SB_LEFT:
+        newScroll = 0.0;
+        break;
+    case SB_RIGHT:
+        newScroll = getMaxScrollX();
+        break;
+    default:
+        return;
+    }
+
+    setScrollX(newScroll);
+}
+
+bool TimelineView::hasArmedTrack() const {
+    return std::any_of(m_tracks.begin(), m_tracks.end(),
+        [](const std::shared_ptr<Track>& track) {
+            return track && track->isVisible() && track->isArmed();
+        });
+}
+
+std::shared_ptr<Track> TimelineView::getFirstArmedTrack() const {
+    auto it = std::find_if(m_tracks.begin(), m_tracks.end(),
+        [](const std::shared_ptr<Track>& track) {
+            return track && track->isVisible() && track->isArmed();
+        });
+    return (it != m_tracks.end()) ? *it : nullptr;
 }

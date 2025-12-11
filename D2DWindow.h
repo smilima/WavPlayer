@@ -71,6 +71,7 @@ protected:
     virtual void onDoubleClick(int x, int y, int button) {}
     virtual void onKeyDown(int vkey) {}
     virtual void onKeyUp(int vkey) {}
+    virtual void onHScroll(int request, int pos) {}
 
     bool createDeviceResources();
     void discardDeviceResources();
@@ -89,6 +90,8 @@ protected:
     // DPI helpers - convert physical pixels to DIPs (D2D coordinate space)
     float pixelsToDipsX(int pixels) const { return pixels / m_dpiScaleX; }
     float pixelsToDipsY(int pixels) const { return pixels / m_dpiScaleY; }
+    float dipsToPixelsX(float dips) const { return dips * m_dpiScaleX; }
+    float dipsToPixelsY(float dips) const { return dips * m_dpiScaleY; }
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);

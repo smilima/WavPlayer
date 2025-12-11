@@ -8,6 +8,7 @@
 class TimelineView : public D2DWindow {
 public:
     using PlayheadCallback = std::function<void(double)>;
+    using RegionChangedCallback = std::function<void()>;
 
     ~TimelineView();
 
@@ -25,6 +26,12 @@ public:
     void setPlayheadPosition(double seconds);
     double getPlayheadPosition() const { return m_playheadPosition; }
     void setPlayheadCallback(PlayheadCallback cb) { m_onPlayheadChanged = cb; }
+
+    // Notify host when regions are added/removed/changed
+    void setRegionChangedCallback(RegionChangedCallback cb) { m_onRegionChanged = std::move(cb); }
+
+    // Timeline extent (seconds)
+    void setTimelineDuration(double duration);
 
     // Follow playhead - auto-scroll to keep playhead visible during playback
     void setFollowPlayhead(bool follow) { m_followPlayhead = follow; }
@@ -47,7 +54,10 @@ public:
 
     // Selection
     int getSelectedTrackIndex() const { return m_selectedTrack; }
-    void setSelectedTrackIndex(int index) { m_selectedTrack = index; invalidate(); }
+    void setSelectedTrackIndex(int index);
+    int getSelectedRegionIndex() const { return m_selectedRegion; }
+    void setSelectedRegion(int trackIndex, int regionIndex);
+    void clearRegionSelection();
 
     // Track header width
     static constexpr int TRACK_HEADER_WIDTH = 200;
@@ -61,15 +71,16 @@ protected:
     void onMouseMove(int x, int y) override;
     void onMouseWheel(int x, int y, int delta) override;
     void onDoubleClick(int x, int y, int button) override;
+    void onHScroll(int request, int pos) override;
 
 private:
     void drawRuler(ID2D1RenderTarget* rt);
     void drawGrid(ID2D1RenderTarget* rt);
     void drawTracks(ID2D1RenderTarget* rt);
     void drawTrackHeader(ID2D1RenderTarget* rt, Track& track, float y, float height, bool isSelected);
-    void drawTrackContent(ID2D1RenderTarget* rt, Track& track, float y, float height);
+    void drawTrackContent(ID2D1RenderTarget* rt, Track& track, float y, float height, size_t trackIndex);
     void drawWaveform(ID2D1RenderTarget* rt, const TrackRegion& region,
-        float trackY, float trackHeight, const Color& color);
+        float trackY, float trackHeight, const Color& color, bool isSelected);
     void drawPlayhead(ID2D1RenderTarget* rt);
 
     double pixelToTime(int x) const;
@@ -82,6 +93,14 @@ private:
     enum class TrackButton { None, Mute, Solo, Arm };
     TrackButton getButtonAtPosition(int trackIndex, int x, int y) const;
     int getTrackYPosition(int trackIndex) const;
+    int hitTestRegion(int trackIndex, int x, int y) const;
+
+    void showRegionContextMenu(int x, int y);
+    bool deleteSelectedRegion();
+
+    void updateScrollMetrics();
+    void syncScrollBarPosition();
+    double getMaxScrollX() const;
 
     // Track name editing
     void startTrackNameEdit(int trackIndex);
@@ -98,6 +117,7 @@ private:
     double m_pixelsPerSecond = 100.0;
     double m_scrollX = 0.0;
     int m_scrollY = 0;
+    double m_timelineDuration = 0.0;
 
     double m_bpm = 120.0;
     bool m_snapToGrid = true;
@@ -119,4 +139,5 @@ private:
     int m_editingTrackIndex = -1;
 
     PlayheadCallback m_onPlayheadChanged;
+    RegionChangedCallback m_onRegionChanged;
 };
