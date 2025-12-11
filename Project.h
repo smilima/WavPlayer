@@ -39,6 +39,7 @@ public:
 
     // Audio clip cache (maps file paths to loaded clips)
     std::shared_ptr<AudioClip> getOrLoadClip(const std::wstring& filepath);
+    void removeClipFromCache(const std::wstring& filepath);  // NEW
     const std::map<std::wstring, std::shared_ptr<AudioClip>>& getClipCache() const { return m_clipCache; }
 
     // Project name (derived from filename or "Untitled")

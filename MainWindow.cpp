@@ -138,7 +138,7 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     return true;
 }
 
-void MainWindow::setupMenus() {
+void MainWindow::setupMenus() const {
     HMENU menuBar = CreateMenu();
 
     // File menu
@@ -460,9 +460,11 @@ void MainWindow::pause() {
 void MainWindow::stop() {
     // Stop recording if in progress
     if (m_audioEngine->isRecording()) {
-        stopRecording();
+        m_audioEngine->stopRecording();
+        m_transportBar->setRecording(false);
     }
 
+    // Stop playback
     m_audioEngine->stop();
     m_transportBar->setPlaying(false);
     m_transportBar->setPosition(0);
@@ -490,16 +492,47 @@ void MainWindow::startRecording() {
         return;
     }
 
-    // Remember which track we're recording to and where
+    // Find the track index for naming the recording file
+    m_recordingTrackIndex = -1;
+    const auto& tracks = m_project->getTracks();
+    for (size_t i = 0; i < tracks.size(); ++i) {
+        if (tracks[i] == armedTrack) {
+            m_recordingTrackIndex = static_cast<int>(i) + 1;  // 1-based for user-friendly naming
+            break;
+        }
+    }
+
+    // Remember which track we're recording to and where (punch-in position)
     m_recordingTrack = armedTrack;
     m_recordingStartPosition = m_timelineView->getPlayheadPosition();
+
+    // Ensure tracks pointer is set for playback during recording
+    m_audioEngine->setTracks(&m_project->getTracks());
+    
+    // Calculate duration for playback - extend if we're punching in past current content
+    double maxDuration = m_recordingStartPosition + 3600.0;  // Allow up to 1 hour of recording
+    for (const auto& track : m_project->getTracks()) {
+        for (const auto& region : track->getRegions()) {
+            maxDuration = std::max(maxDuration, region.endTime());
+        }
+    }
+    m_audioEngine->setDuration(maxDuration);
+    
+    // Set playback position to match where we're starting the recording (punch-in point)
+    m_audioEngine->setPosition(m_recordingStartPosition);
 
     if (m_audioEngine->startRecording()) {
         m_transportBar->setRecording(true);
         m_timelineView->setFollowPlayhead(true);
+        
+        // Start playback so we can hear existing tracks while recording
+        // The armed track should be muted during recording to avoid feedback
+        m_audioEngine->play();
+        m_transportBar->setPlaying(true);
     }
     else {
         m_recordingTrack = nullptr;
+        m_recordingTrackIndex = -1;
         m_recordingStartPosition = 0.0;
         MessageBox(m_hwnd, L"Failed to start recording.\nPlease check your microphone settings.",
             L"Recording Error", MB_OK | MB_ICONERROR);
@@ -511,8 +544,8 @@ void MainWindow::stopRecording() {
 
     m_audioEngine->stopRecording();
     m_transportBar->setRecording(false);
+    
 }
-
 void MainWindow::toggleRecording() {
     if (m_audioEngine->isRecording()) {
         stopRecording();
@@ -527,16 +560,94 @@ void MainWindow::onRecordingComplete(std::shared_ptr<AudioClip> clip) {
         return;
     }
 
-    // Ask user where to save the recording
-    if (saveRecordedClip(clip)) {
-        // Clip was saved and will be added to project via loadAudioFile
+    // Auto-save the recording to a temporary file without prompting
+    autoSaveRecordedClip(clip);
+}
+bool MainWindow::autoSaveRecordedClip(std::shared_ptr<AudioClip> clip) {
+    // Generate automatic filename with project name and track number
+    std::wstring projectName = m_project->getProjectName();
+    
+    // Count existing recordings for this track to generate unique name
+    int recordingNum = 1;
+    if (m_recordingTrackIndex > 0 && m_recordingTrack) {
+        // Count how many regions already exist on this track
+        recordingNum = static_cast<int>(m_recordingTrack->getRegions().size()) + 1;
     }
+    
+    // Get the project directory, or use a default temp location
+    std::wstring directory;
+    if (m_project->hasFilename()) {
+        std::filesystem::path projectPath(m_project->getFilename());
+        directory = projectPath.parent_path().wstring();
+    } else {
+        // Use temp directory if project hasn't been saved yet
+        wchar_t tempPath[MAX_PATH];
+        GetTempPath(MAX_PATH, tempPath);
+        directory = tempPath;
+    }
+    
+    // Create filename: ProjectName_Track1_Take1.wav
+    std::wstring filename = directory + L"\\" + projectName + L"_Track" + 
+                            std::to_wstring(m_recordingTrackIndex) + L"_Take" +
+                            std::to_wstring(recordingNum) + L".wav";
+    
+    // Save the clip
+    if (!clip->saveToFile(filename)) {
+        MessageBox(m_hwnd, L"Failed to auto-save recording", L"Error", MB_OK | MB_ICONERROR);
+        m_recordingTrack = nullptr;
+        m_recordingTrackIndex = -1;
+        m_recordingStartPosition = 0.0;
+        return false;
+    }
+
+    // Add clip to the recording track (or first track if none specified)
+    auto targetTrack = m_recordingTrack;
+    if (!targetTrack && !m_project->getTracks().empty()) {
+        targetTrack = m_project->getTracks()[0];
+    }
+
+    if (targetTrack) {
+        // Load clip into project cache
+        auto loadedClip = m_project->getOrLoadClip(filename);
+        if (loadedClip) {
+            TrackRegion region;
+            region.clip = loadedClip;
+            region.startTime = m_recordingStartPosition;  // Punch-in position
+            region.clipOffset = 0.0;
+            region.duration = loadedClip->getDuration();
+
+            targetTrack->addRegion(region);
+
+            // Update duration display
+            double maxDuration = 0.0;
+            for (const auto& t : m_project->getTracks()) {
+                for (const auto& r : t->getRegions()) {
+                    maxDuration = std::max(maxDuration, r.endTime());
+                }
+            }
+            m_transportBar->setDuration(maxDuration);
+            m_audioEngine->setDuration(maxDuration);
+
+            // Notify transport that we have audio
+            m_transportBar->setHasAudioLoaded(true);
+
+            m_project->setModified(true);
+            updateWindowTitle();
+            m_timelineView->invalidate();
+        }
+    }
+
+    m_recordingTrack = nullptr;
+    m_recordingTrackIndex = -1;
+    m_recordingStartPosition = 0.0;
+    return true;
 }
 
 bool MainWindow::saveRecordedClip(std::shared_ptr<AudioClip> clip) {
-    // Generate default filename
+    // Generate default filename with project name prefix
     ++m_recordingCount;
-    std::wstring defaultName = L"Recording_" + std::to_wstring(m_recordingCount);
+    std::wstring projectName = m_project->getProjectName();
+    std::wstring defaultName = projectName + L"_Recording_" + std::to_wstring(m_recordingCount);
 
     OPENFILENAME ofn = {};
     wchar_t filename[MAX_PATH] = {};
@@ -553,6 +664,7 @@ bool MainWindow::saveRecordedClip(std::shared_ptr<AudioClip> clip) {
 
     if (!GetSaveFileName(&ofn)) {
         m_recordingTrack = nullptr;
+        m_recordingStartPosition = 0.0;
         return false;
     }
 
@@ -560,6 +672,7 @@ bool MainWindow::saveRecordedClip(std::shared_ptr<AudioClip> clip) {
     if (!clip->saveToFile(filename)) {
         MessageBox(m_hwnd, L"Failed to save recording", L"Error", MB_OK | MB_ICONERROR);
         m_recordingTrack = nullptr;
+        m_recordingStartPosition = 0.0;
         return false;
     }
 
@@ -575,7 +688,7 @@ bool MainWindow::saveRecordedClip(std::shared_ptr<AudioClip> clip) {
         if (loadedClip) {
             TrackRegion region;
             region.clip = loadedClip;
-            region.startTime = m_recordingStartPosition;  // Start where recording began
+            region.startTime = m_recordingStartPosition;
             region.clipOffset = 0.0;
             region.duration = loadedClip->getDuration();
 
@@ -706,7 +819,51 @@ void MainWindow::onCommand(int id) {
         int index = m_timelineView->getSelectedTrackIndex();
 
         // Validate index
-        if (index >= 0 && index < m_project->getTracks().size()) {
+        if (index >= 0 && index < static_cast<int>(m_project->getTracks().size())) {
+            auto& track = m_project->getTracks()[index];
+            
+            // Check if track has any regions with audio files
+            bool hasAudioFiles = false;
+            for (const auto& region : track->getRegions()) {
+                if (region.clip) {
+                    hasAudioFiles = true;
+                    break;
+                }
+            }
+            
+            // Ask user what to do with associated audio files
+            bool deleteFiles = false;
+            if (hasAudioFiles) {
+                int result = MessageBox(m_hwnd, 
+                    L"Do you want to permanently delete the audio files associated with this track?\n\n"
+                    L"Yes = Delete track AND audio files\n"
+                    L"No = Delete track only (keep audio files)\n"
+                    L"Cancel = Don't delete anything",
+                    L"Delete Track", 
+                    MB_YESNOCANCEL | MB_ICONQUESTION);
+                
+                if (result == IDCANCEL) {
+                    break;  // User cancelled, don't delete anything
+                }
+                deleteFiles = (result == IDYES);
+            }
+            
+            // Collect file paths to delete before removing the track
+            std::vector<std::wstring> filesToDelete;
+            if (deleteFiles) {
+                for (const auto& region : track->getRegions()) {
+                    if (region.clip) {
+                        // Find the file path from the clip cache
+                        for (const auto& [path, clip] : m_project->getClipCache()) {
+                            if (clip == region.clip) {
+                                filesToDelete.push_back(path);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
             // Remove from Project (Data)
             m_project->removeTrack(index);
 
@@ -715,6 +872,18 @@ void MainWindow::onCommand(int id) {
 
             // Reset selection to avoid pointing to an invalid index
             m_timelineView->setSelectedTrackIndex(-1);
+            
+            // Delete the audio files if requested
+            for (const auto& filepath : filesToDelete) {
+                // Remove from clip cache first
+                m_project->removeClipFromCache(filepath);
+                
+                // Delete the file
+                if (!DeleteFile(filepath.c_str())) {
+                    std::wstring msg = L"Failed to delete file:\n" + filepath;
+                    MessageBox(m_hwnd, msg.c_str(), L"Warning", MB_OK | MB_ICONWARNING);
+                }
+            }
 
             // Mark project as modified
             m_project->setModified(true);

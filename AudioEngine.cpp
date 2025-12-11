@@ -107,9 +107,8 @@ bool AudioClip::saveToFile(const std::wstring& filename) const {
     std::ofstream file(filename, std::ios::binary);
     if (!file) return false;
 
-    // Calculate sizes
-    uint32_t dataSize = static_cast<uint32_t>(m_samples.size() * sizeof(int16_t) / 
-                        (sizeof(float) / sizeof(int16_t)));
+    // Calculate sizes - each float sample becomes one int16 sample
+    uint32_t dataSize = static_cast<uint32_t>(m_samples.size() * sizeof(int16_t));
     uint32_t fileSize = 36 + dataSize;
 
     // RIFF header
@@ -123,16 +122,18 @@ bool AudioClip::saveToFile(const std::wstring& filename) const {
     file.write(reinterpret_cast<const char*>(&fmtSize), 4);
     
     uint16_t audioFormat = 1;  // PCM
+    uint16_t channels = m_format.channels;
+    uint32_t sampleRate = m_format.sampleRate;
+    uint16_t bitsPerSample = 16;  // Always save as 16-bit
+    uint32_t byteRate = sampleRate * channels * (bitsPerSample / 8);
+    uint16_t blockAlign = channels * (bitsPerSample / 8);
+    
     file.write(reinterpret_cast<const char*>(&audioFormat), 2);
-    file.write(reinterpret_cast<const char*>(&m_format.channels), 2);
-    file.write(reinterpret_cast<const char*>(&m_format.sampleRate), 4);
-    
-    uint32_t byteRate = m_format.sampleRate * m_format.channels * (m_format.bitsPerSample / 8);
+    file.write(reinterpret_cast<const char*>(&channels), 2);
+    file.write(reinterpret_cast<const char*>(&sampleRate), 4);
     file.write(reinterpret_cast<const char*>(&byteRate), 4);
-    
-    uint16_t blockAlign = m_format.channels * (m_format.bitsPerSample / 8);
     file.write(reinterpret_cast<const char*>(&blockAlign), 2);
-    file.write(reinterpret_cast<const char*>(&m_format.bitsPerSample), 2);
+    file.write(reinterpret_cast<const char*>(&bitsPerSample), 2);
 
     // data chunk
     file.write("data", 4);
@@ -215,7 +216,10 @@ std::vector<std::pair<float, float>> AudioClip::getWaveformData(size_t numBlocks
 // AudioEngine Implementation
 // ============================================================================
 
-AudioEngine::AudioEngine() {}
+AudioEngine::AudioEngine() {
+    // ... existing initialization ...
+    m_inputMonitorBuffer.assign(INPUT_MONITOR_BUFFER_SIZE, 0.0f);
+}
 
 AudioEngine::~AudioEngine() {
     shutdown();
@@ -318,14 +322,22 @@ bool AudioEngine::play() {
         }
     }
 
+    if (!m_isPaused) {
+        m_playbackStartTime = std::chrono::steady_clock::now();
+        m_playbackStarted = true;
+    }
+    
     return true;
 }
 
 void AudioEngine::pause() {
-    if (m_waveOut && m_isPlaying) {
-        waveOutPause(m_waveOut);
+    if (m_isPlaying) {
+        // Save current position before pausing
+        m_playbackPosition = static_cast<size_t>(getPosition() * m_waveFormat.nSamplesPerSec);
+        m_playbackStarted = false;
         m_isPlaying = false;
         m_isPaused = true;
+        waveOutPause(m_waveOut);
     }
 }
 
@@ -336,6 +348,7 @@ void AudioEngine::stop() {
         waveOutReset(m_waveOut);
         // Restart from reset state so device is ready to play
         waveOutRestart(m_waveOut);
+        m_playbackStarted = false;
         m_playbackPosition = 0;
     }
 }
@@ -343,19 +356,24 @@ void AudioEngine::stop() {
 void AudioEngine::setPosition(double seconds) {
     size_t frame = static_cast<size_t>(seconds * m_waveFormat.nSamplesPerSec);
     
-    // Clamp to duration
-    double duration = getDuration();
-    size_t maxFrame = static_cast<size_t>(duration * m_waveFormat.nSamplesPerSec);
-    
-    if (maxFrame > 0) {
-        m_playbackPosition = std::min(frame, maxFrame);
+    if (m_isPlaying) {
+        // Adjust start time to maintain correct position
+        double currentPos = getPosition();
+        double offset = seconds - currentPos;
+        m_playbackStartTime += std::chrono::microseconds(static_cast<long long>(offset * 1e6));
     } else {
         m_playbackPosition = frame;
     }
 }
 
 double AudioEngine::getPosition() const {
-    return static_cast<double>(m_playbackPosition.load()) / m_waveFormat.nSamplesPerSec;
+    if (m_isPlaying && m_playbackStarted) {
+        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::steady_clock::now() - m_playbackStartTime).count() / 1e6;
+        return elapsed;
+    } else {
+        return static_cast<double>(m_playbackPosition.load()) / m_waveFormat.nSamplesPerSec;
+    }
 }
 
 double AudioEngine::getDuration() const {
@@ -458,6 +476,16 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
                     rightMix += right;
                 }
                 
+                // Mix in input monitoring if enabled
+                if (m_inputMonitoring) {
+                    float inputLeft = m_inputMonitorBuffer[m_inputMonitorReadPos];
+                    m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    float inputRight = (m_waveFormat.nChannels > 1) ? m_inputMonitorBuffer[m_inputMonitorReadPos] : inputLeft;
+                    m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    leftMix += inputLeft;
+                    rightMix += inputRight;
+                }
+                
                 // Apply master volume and clamp
                 leftMix *= masterVolume;
                 rightMix *= masterVolume;
@@ -472,12 +500,12 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
             }
         }
         
-        m_playbackPosition = pos + frameCount;
-        
-        // Check if playback finished
-        if (m_playbackPosition >= totalFrames) {
+        // Advance playback position
+        pos += frameCount;
+        if (pos >= totalFrames) {
             m_isPlaying = false;
         }
+        m_playbackPosition = pos;
     }
     // Fall back to single clip playback
     else if (m_clip) {
@@ -505,6 +533,13 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
                         sample = samples[pos * format.channels];  // Duplicate first channel
                     }
                     
+                    // Mix in input monitoring if enabled
+                    if (m_inputMonitoring) {
+                        float inputSample = m_inputMonitorBuffer[m_inputMonitorReadPos];
+                        m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                        sample += inputSample;
+                    }
+                    
                     // Apply volume and convert to int16
                     sample *= masterVolume;
                     sample = std::clamp(sample, -1.0f, 1.0f);
@@ -515,16 +550,24 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
             }
         }
         
+        // Update playback position
         m_playbackPosition = pos;
-
-        // Check if playback finished
-        if (pos >= totalFrames) {
-            m_isPlaying = false;
-        }
     }
     else {
-        // No audio source - output silence
-        memset(buffer, 0, frameCount * m_waveFormat.nBlockAlign);
+        // No audio source - output silence, but still monitor input if enabled
+        if (m_inputMonitoring) {
+            for (size_t frame = 0; frame < frameCount; ++frame) {
+                for (uint16_t ch = 0; ch < m_waveFormat.nChannels; ++ch) {
+                    float inputSample = m_inputMonitorBuffer[m_inputMonitorReadPos];
+                    m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    inputSample *= masterVolume;
+                    inputSample = std::clamp(inputSample, -1.0f, 1.0f);
+                    buffer[frame * m_waveFormat.nChannels + ch] = static_cast<int16_t>(inputSample * 32767.0f);
+                }
+            }
+        } else {
+            memset(buffer, 0, frameCount * m_waveFormat.nBlockAlign);
+        }
     }
 }
 
@@ -620,6 +663,11 @@ bool AudioEngine::startRecording() {
         m_recordedSamples.clear();
     }
     
+    // If input monitoring is enabled and we're not already playing, start playback to hear tracks
+    if (m_inputMonitoring && !m_isPlaying && (m_duration > 0.0 || m_clip)) {
+        play();
+    }
+    
     // Queue all recording buffers
     for (int i = 0; i < NUM_RECORD_BUFFERS; ++i) {
         m_recordHeaders[i].dwBytesRecorded = 0;
@@ -639,11 +687,29 @@ bool AudioEngine::startRecording() {
 void AudioEngine::stopRecording() {
     if (!m_isRecording || !m_waveIn) return;
     
-    m_isRecording = false;
+    // Set stopping flag - callbacks will write to pending buffer
+    m_isStopping = true;
+    
+    // Clear pending samples buffer (no lock needed, we own it during stopping)
+    m_pendingSamples.clear();
     
     // Stop recording
     waveInStop(m_waveIn);
+    
+    // Reset returns all buffers - they go to m_pendingSamples
     waveInReset(m_waveIn);
+    
+    // Now merge pending samples into recorded samples
+    {
+        std::lock_guard<std::mutex> lock(m_recordMutex);
+        m_recordedSamples.insert(m_recordedSamples.end(), 
+                                  m_pendingSamples.begin(), 
+                                  m_pendingSamples.end());
+    }
+    
+    // Now safe to clear flags
+    m_isRecording = false;
+    m_isStopping = false;
     
     // Notify callback if set
     if (m_recordingCallback) {
@@ -690,10 +756,11 @@ void CALLBACK AudioEngine::waveInProc(HWAVEIN hwi, UINT uMsg,
         AudioEngine* engine = reinterpret_cast<AudioEngine*>(dwInstance);
         WAVEHDR* header = reinterpret_cast<WAVEHDR*>(dwParam1);
         
+        // Always process the buffer to capture all audio data
         engine->processRecordedBuffer(header);
         
-        // Re-queue buffer if still recording
-        if (engine->m_isRecording) {
+        // Only re-queue if actively recording (not stopping or stopped)
+        if (engine->m_isRecording && !engine->m_isStopping && engine->m_waveIn) {
             header->dwBytesRecorded = 0;
             waveInAddBuffer(hwi, header, sizeof(WAVEHDR));
         }
@@ -703,15 +770,32 @@ void CALLBACK AudioEngine::waveInProc(HWAVEIN hwi, UINT uMsg,
 void AudioEngine::processRecordedBuffer(WAVEHDR* header) {
     if (!header || header->dwBytesRecorded == 0) return;
     
-    int bufferIndex = static_cast<int>(header->dwUser);
-    const int16_t* inputBuffer = m_recordBuffers[bufferIndex].data();
+    const int16_t* inputBuffer = reinterpret_cast<const int16_t*>(header->lpData);
     size_t sampleCount = header->dwBytesRecorded / sizeof(int16_t);
     
+    // During stopping phase, write directly to pending buffer (no lock needed)
+    if (m_isStopping) {
+        m_pendingSamples.reserve(m_pendingSamples.size() + sampleCount);
+        for (size_t i = 0; i < sampleCount; ++i) {
+            float sample = inputBuffer[i] / 32768.0f;
+            m_pendingSamples.push_back(sample);
+        }
+        return;
+    }
+    
+    // Normal recording - use mutex
     std::lock_guard<std::mutex> lock(m_recordMutex);
     
-    // Convert int16 to float and append to recorded samples
+    m_recordedSamples.reserve(m_recordedSamples.size() + sampleCount);
+    
     for (size_t i = 0; i < sampleCount; ++i) {
         float sample = inputBuffer[i] / 32768.0f;
         m_recordedSamples.push_back(sample);
+        
+        if (m_inputMonitoring) {
+            size_t writePos = m_inputMonitorWritePos.load();
+            m_inputMonitorBuffer[writePos] = sample;
+            m_inputMonitorWritePos = (writePos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+        }
     }
 }

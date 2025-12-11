@@ -24,7 +24,8 @@ void Track::getAudioAtTime(double time, float* leftOut, float* rightOut,
     *leftOut = 0.0f;
     *rightOut = 0.0f;
     
-    if (m_muted) return;
+    // Skip muted tracks or armed tracks (to avoid feedback during recording)
+    if (m_muted || m_armed) return;
     
     for (const auto& region : m_regions) {
         if (time >= region.startTime && time < region.endTime()) {

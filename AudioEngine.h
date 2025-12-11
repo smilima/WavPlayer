@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <chrono>
 
 // Forward declaration
 class Track;
@@ -145,11 +146,22 @@ private:
     std::vector<int16_t> m_recordBuffers[NUM_RECORD_BUFFERS];
     
     std::vector<float> m_recordedSamples;
-    std::mutex m_recordMutex;
+    std::vector<float> m_pendingSamples;  // NEW: Buffer for samples during stop
+    mutable std::mutex m_recordMutex;
     std::atomic<bool> m_isRecording{false};
+    std::atomic<bool> m_isStopping{false};
     std::atomic<bool> m_inputMonitoring{false};
     int m_inputDeviceIndex = 0;  // WAVE_MAPPER by default
     
     PositionCallback m_positionCallback;
     RecordingCallback m_recordingCallback;
+
+    std::chrono::steady_clock::time_point m_playbackStartTime;
+    bool m_playbackStarted = false;
+
+    // Input monitoring buffer for real-time audio
+    std::vector<float> m_inputMonitorBuffer;
+    std::atomic<size_t> m_inputMonitorWritePos{0};
+    size_t m_inputMonitorReadPos = 0;
+    static constexpr size_t INPUT_MONITOR_BUFFER_SIZE = 8192;
 };

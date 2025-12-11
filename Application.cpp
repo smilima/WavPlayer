@@ -14,7 +14,11 @@ bool Application::initialize(HINSTANCE hInstance) {
     m_hInstance = hInstance;
 
     // Initialize COM (needed for some Windows APIs)
-    CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    HRESULT hrCoInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrCoInit)) {
+        MessageBox(nullptr, L"Failed to initialize COM", L"Error", MB_OK);
+        return false;
+    }
 
     // Initialize Direct2D factory
     HRESULT hr = D2D1CreateFactory(
@@ -23,6 +27,7 @@ bool Application::initialize(HINSTANCE hInstance) {
     );
     if (FAILED(hr)) {
         MessageBox(nullptr, L"Failed to create Direct2D factory", L"Error", MB_OK);
+        CoUninitialize();
         return false;
     }
 
@@ -34,6 +39,7 @@ bool Application::initialize(HINSTANCE hInstance) {
     );
     if (FAILED(hr)) {
         MessageBox(nullptr, L"Failed to create DirectWrite factory", L"Error", MB_OK);
+        CoUninitialize();
         return false;
     }
 
@@ -41,6 +47,7 @@ bool Application::initialize(HINSTANCE hInstance) {
     m_mainWindow = std::make_unique<MainWindow>();
     if (!m_mainWindow->create(L"Simple DAW", 1400, 800)) {
         MessageBox(nullptr, L"Failed to create main window", L"Error", MB_OK);
+        CoUninitialize();
         return false;
     }
 

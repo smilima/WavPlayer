@@ -50,6 +50,10 @@ std::shared_ptr<AudioClip> Project::getOrLoadClip(const std::wstring& filepath) 
     return nullptr;
 }
 
+void Project::removeClipFromCache(const std::wstring& filepath) {
+    m_clipCache.erase(filepath);
+}
+
 std::wstring Project::getProjectName() const {
     if (m_filename.empty()) {
         return L"Untitled";

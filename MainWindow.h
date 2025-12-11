@@ -5,6 +5,7 @@
 #include "AudioEngine.h"
 #include "Project.h"
 #include <memory>
+#include <filesystem>
 
 class MainWindow {
 public:
@@ -42,14 +43,15 @@ private:
     void onCommand(int id);
     void onDropFiles(HDROP hDrop);
     void onClose();
-    void setupMenus();
+    void setupMenus() const;
     void updatePlaybackPosition();
     void updateWindowTitle();
     void syncProjectToUI();
     void syncUIToProject();
     bool promptSaveIfModified();  // Returns false if user cancels
     void onRecordingComplete(std::shared_ptr<AudioClip> clip);
-    bool saveRecordedClip(std::shared_ptr<AudioClip> clip);
+    bool saveRecordedClip(std::shared_ptr<AudioClip> clip);  // Keep for manual save if needed
+    bool autoSaveRecordedClip(std::shared_ptr<AudioClip> clip);  // Auto-save without dialog
     
     HWND m_hwnd = nullptr;
     UINT_PTR m_timerId = 0;
@@ -60,6 +62,7 @@ private:
     std::unique_ptr<Project> m_project;
     
     int m_recordingCount = 0;  // Counter for auto-naming recordings
+    int m_recordingTrackIndex = -1;  // Track number (1-based) for recording filename
     std::shared_ptr<Track> m_recordingTrack;  // Track that was armed when recording started
-    double m_recordingStartPosition = 0.0;  // Playhead position when recording started
+    double m_recordingStartPosition = 0.0;  // Playhead position when recording started (punch-in point)
 };
