@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 #include "Application.h"
+#include "resource.h"
 
 #include <Shlwapi.h>
 #include <commdlg.h>
@@ -96,7 +97,8 @@ bool MainWindow::registerWindowClass() const {
     wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.hbrBackground = reinterpret_cast<HBRUSH>(COLOR_WINDOW + 1);
     wc.lpszClassName = WINDOW_CLASS_NAME;
-    wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    wc.hIcon = LoadIcon(wc.hInstance, MAKEINTRESOURCE(IDI_WAVPLAYER));
+    wc.hIconSm = LoadIcon(wc.hInstance, MAKEINTRESOURCE(IDI_WAVPLAYER));
 
     ATOM atom = RegisterClassEx(&wc);
     if (!atom && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
