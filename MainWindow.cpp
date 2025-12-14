@@ -1007,7 +1007,10 @@ void MainWindow::onCommand(int id) {
     case ID_VIEW_ZOOM_OUT:
         m_timelineView->setPixelsPerSecond(m_timelineView->getPixelsPerSecond() / 1.5);
         break;
-    
+    case ID_HELP_ABOUT:
+        showAboutDialog();
+        break;
+
     default:
         break;
     }
