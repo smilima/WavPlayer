@@ -371,11 +371,11 @@ INT_PTR CALLBACK AboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lPa
     switch (message) {
     case WM_INITDIALOG:
         {
-            // Set larger font for title
+            // Set larger, bold font for title
             HWND hTitle = GetDlgItem(hDlg, IDC_STATIC_TITLE);
             if (hTitle) {
                 HFONT hFont = CreateFont(
-                    18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                    28, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                     CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
                     L"Segoe UI"
