@@ -48,7 +48,8 @@ enum MenuID {
     ID_VIEW_ZOOM_IN,
     ID_VIEW_ZOOM_OUT,
     ID_VIEW_ZOOM_FIT,
-    ID_HELP_ABOUT 
+    ID_VIEW_SPECTRUM,
+    ID_HELP_ABOUT
 };
 
 MainWindow::MainWindow() = default;
@@ -141,6 +142,11 @@ void MainWindow::createChildViews() {
 
     m_transportBar = std::make_unique<TransportBar>();
     m_transportBar->create(m_hwnd, 0, timelineHeight, clientWidth, TRANSPORT_HEIGHT);
+
+    // Create spectrum window (hidden by default)
+    m_spectrumWindow = std::make_unique<SpectrumWindow>();
+    m_spectrumWindow->create(nullptr, 100, 100, 600, 400, L"SpectrumWindow");
+    SetWindowText(m_spectrumWindow->getHWND(), L"Spectrum Analyzer");
 }
 
 void MainWindow::configureTimelineCallbacks() {
@@ -175,6 +181,13 @@ void MainWindow::configureAudioCallbacks() {
     if (m_audioEngine) {
         m_audioEngine->setRecordingCallback([this](std::shared_ptr<AudioClip> clip) {
             onRecordingComplete(std::move(clip));
+        });
+
+        // Set up spectrum callback
+        m_audioEngine->setSpectrumCallback([this](const float* samples, size_t sampleCount, int sampleRate) {
+            if (m_spectrumWindow) {
+                m_spectrumWindow->updateSpectrum(samples, sampleCount, sampleRate);
+            }
         });
     }
 }
@@ -459,6 +472,8 @@ void MainWindow::setupMenus() const {
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_IN, L"Zoom &In\tCtrl++");
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_OUT, L"Zoom &Out\tCtrl+-");
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_FIT, L"Zoom to &Fit\tCtrl+0");
+    AppendMenu(viewMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(viewMenu, MF_STRING, ID_VIEW_SPECTRUM, L"Show &Spectrum");
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(viewMenu), L"&View");
 
     HMENU helpMenu = CreatePopupMenu();
@@ -1010,6 +1025,12 @@ void MainWindow::onCommand(int id) {
         break;
     case ID_VIEW_ZOOM_OUT:
         m_timelineView->setPixelsPerSecond(m_timelineView->getPixelsPerSecond() / 1.5);
+        break;
+    case ID_VIEW_SPECTRUM:
+        if (m_spectrumWindow) {
+            ShowWindow(m_spectrumWindow->getHWND(), SW_SHOW);
+            SetForegroundWindow(m_spectrumWindow->getHWND());
+        }
         break;
     case ID_HELP_ABOUT:
         showAboutDialog();

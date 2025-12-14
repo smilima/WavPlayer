@@ -50,6 +50,7 @@ class AudioEngine {
 public:
     using PositionCallback = std::function<void(double positionSeconds)>;
     using RecordingCallback = std::function<void(std::shared_ptr<AudioClip> recordedClip)>;
+    using SpectrumCallback = std::function<void(const float* samples, size_t sampleCount, int sampleRate)>;
 
     AudioEngine();
     ~AudioEngine();
@@ -97,6 +98,7 @@ public:
     // Callbacks
     void setPositionCallback(PositionCallback callback) { m_positionCallback = callback; }
     void setRecordingCallback(RecordingCallback callback) { m_recordingCallback = callback; }
+    void setSpectrumCallback(SpectrumCallback callback) { m_spectrumCallback = callback; }
 
     // Get current playback sample position
     size_t getPlaybackPosition() const { return m_playbackPosition; }
@@ -155,6 +157,7 @@ private:
     
     PositionCallback m_positionCallback;
     RecordingCallback m_recordingCallback;
+    SpectrumCallback m_spectrumCallback;
 
     std::chrono::steady_clock::time_point m_playbackStartTime;
     bool m_playbackStarted = false;

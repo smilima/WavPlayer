@@ -567,6 +567,16 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
             memset(buffer, 0, frameCount * m_waveFormat.nBlockAlign);
         }
     }
+
+    // Call spectrum callback if set
+    if (m_spectrumCallback) {
+        // Convert int16 buffer to float for spectrum analysis
+        std::vector<float> floatSamples(frameCount * m_waveFormat.nChannels);
+        for (size_t i = 0; i < frameCount * m_waveFormat.nChannels; ++i) {
+            floatSamples[i] = buffer[i] / 32768.0f;
+        }
+        m_spectrumCallback(floatSamples.data(), frameCount * m_waveFormat.nChannels, m_waveFormat.nSamplesPerSec);
+    }
 }
 
 // ============================================================================
