@@ -9,6 +9,7 @@ class TimelineView : public D2DWindow {
 public:
     using PlayheadCallback = std::function<void(double)>;
     using RegionChangedCallback = std::function<void()>;
+    using TrackDeleteCallback = std::function<void()>;
 
     ~TimelineView();
 
@@ -29,6 +30,9 @@ public:
 
     // Notify host when regions are added/removed/changed
     void setRegionChangedCallback(RegionChangedCallback cb) { m_onRegionChanged = std::move(cb); }
+
+    // Notify host when track deletion is requested
+    void setTrackDeleteCallback(TrackDeleteCallback cb) { m_onTrackDelete = std::move(cb); }
 
     // Timeline extent (seconds)
     void setTimelineDuration(double duration);
@@ -110,6 +114,8 @@ private:
 
     void showRegionContextMenu(int x, int y);
     bool deleteSelectedRegion();
+    void showTrackContextMenu(int x, int y);
+    bool deleteSelectedTrack();
 
     void updateScrollMetrics();
     double getMaxScrollX() const;
@@ -154,6 +160,7 @@ private:
 
     PlayheadCallback m_onPlayheadChanged;
     RegionChangedCallback m_onRegionChanged;
+    TrackDeleteCallback m_onTrackDelete;
 
     bool m_scrollbarVisible = false;
     float m_scrollbarHeightDip = 0.0f;

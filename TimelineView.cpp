@@ -733,6 +733,16 @@ TimelineView::TrackButton TimelineView::getButtonAtPosition(int trackIndex, int 
 }
 
 void TimelineView::onMouseDown(int x, int y, int button) {
+    // Handle right-click for context menu
+    if (button == 1) {
+        int trackIndex = getTrackAtY(y);
+        if (trackIndex >= 0) {
+            setSelectedTrackIndex(trackIndex);
+            showTrackContextMenu(x, y);
+        }
+        return;
+    }
+
     if (button != 0) {
         return;
     }
@@ -882,4 +892,53 @@ void TimelineView::onDoubleClick(int x, int y, int button) {
             setPlayheadPosition(pixelToTime(x));
         }
     }
+}
+
+void TimelineView::showTrackContextMenu(int x, int y) {
+    if (m_selectedTrack < 0 || m_selectedTrack >= static_cast<int>(m_tracks.size())) {
+        return;
+    }
+
+    HMENU menu = CreatePopupMenu();
+    if (!menu) {
+        return;
+    }
+
+    // Add menu items
+    AppendMenu(menu, MF_STRING, 2001, L"Delete Track");
+
+    // Convert DIP coordinates to screen coordinates
+    POINT pt = { static_cast<LONG>(x), static_cast<LONG>(y) };
+    ClientToScreen(m_hwnd, &pt);
+
+    // Show the context menu
+    int result = TrackPopupMenu(
+        menu,
+        TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD,
+        pt.x, pt.y,
+        0,
+        m_hwnd,
+        nullptr
+    );
+
+    DestroyMenu(menu);
+
+    // Handle menu selection
+    if (result == 2001) {
+        deleteSelectedTrack();
+    }
+}
+
+bool TimelineView::deleteSelectedTrack() {
+    if (m_selectedTrack < 0 || m_selectedTrack >= static_cast<int>(m_tracks.size())) {
+        return false;
+    }
+
+    // Notify parent to handle the actual deletion
+    // The MainWindow will show confirmation dialog and handle cleanup
+    if (m_onTrackDelete) {
+        m_onTrackDelete();
+    }
+
+    return true;
 }

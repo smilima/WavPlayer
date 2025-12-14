@@ -157,6 +157,10 @@ void MainWindow::configureTimelineCallbacks() {
         refreshProjectDuration();
         markProjectModified();
     });
+
+    m_timelineView->setTrackDeleteCallback([this]() {
+        handleTrackDelete();
+    });
 }
 
 void MainWindow::configureTransportCallbacks() {
