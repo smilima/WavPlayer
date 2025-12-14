@@ -688,6 +688,50 @@ int TimelineView::timeToPixel(double time) const {
     return TRACK_HEADER_WIDTH + static_cast<int>(std::round(relative));
 }
 
+TimelineView::TrackButton TimelineView::getButtonAtPosition(int trackIndex, int x, int y) const {
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks.size())) {
+        return TrackButton::None;
+    }
+
+    int trackY = getTrackYPosition(trackIndex);
+    if (trackY < 0) {
+        return TrackButton::None;
+    }
+
+    auto& track = m_tracks[trackIndex];
+    float trackHeight = static_cast<float>(track->getHeight());
+
+    // Button layout from drawTrackHeader
+    float btnSize = 20;
+    float btnSpacing = 4;
+    float btnY = trackY + trackHeight - 28;
+    float btnX = 12;
+
+    // Check if Y coordinate is within button area
+    if (y < btnY || y > btnY + btnSize) {
+        return TrackButton::None;
+    }
+
+    // Check Mute button
+    if (x >= btnX && x < btnX + btnSize) {
+        return TrackButton::Mute;
+    }
+    btnX += btnSize + btnSpacing;
+
+    // Check Solo button
+    if (x >= btnX && x < btnX + btnSize) {
+        return TrackButton::Solo;
+    }
+    btnX += btnSize + btnSpacing;
+
+    // Check Arm button
+    if (x >= btnX && x < btnX + btnSize) {
+        return TrackButton::Arm;
+    }
+
+    return TrackButton::None;
+}
+
 void TimelineView::onMouseDown(int x, int y, int button) {
     if (button != 0) {
         return;
@@ -732,6 +776,29 @@ void TimelineView::onMouseDown(int x, int y, int button) {
     int trackIndex = getTrackAtY(y);
     if (trackIndex >= 0) {
         setSelectedTrackIndex(trackIndex);
+
+        // Check if clicking on track header buttons
+        if (x < TRACK_HEADER_WIDTH) {
+            TrackButton btn = getButtonAtPosition(trackIndex, x, y);
+            if (btn != TrackButton::None) {
+                auto& track = m_tracks[trackIndex];
+                switch (btn) {
+                case TrackButton::Mute:
+                    track->setMuted(!track->isMuted());
+                    break;
+                case TrackButton::Solo:
+                    track->setSolo(!track->isSolo());
+                    break;
+                case TrackButton::Arm:
+                    track->setArmed(!track->isArmed());
+                    break;
+                default:
+                    break;
+                }
+                invalidate();
+                return;
+            }
+        }
 
         if (x >= TRACK_HEADER_WIDTH) {
             double clickTime = pixelToTime(x);
