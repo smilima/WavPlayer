@@ -907,8 +907,11 @@ void TimelineView::showTrackContextMenu(int x, int y) {
     // Add menu items
     AppendMenu(menu, MF_STRING, 2001, L"Delete Track");
 
-    // Convert DIP coordinates to screen coordinates
-    POINT pt = { static_cast<LONG>(x), static_cast<LONG>(y) };
+    // Convert DIP coordinates to physical pixels, then to screen coordinates
+    POINT pt = {
+        static_cast<LONG>(dipsToPixelsX(static_cast<float>(x))),
+        static_cast<LONG>(dipsToPixelsY(static_cast<float>(y)))
+    };
     ClientToScreen(getHWND(), &pt);
 
     // Show the context menu
