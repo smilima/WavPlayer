@@ -366,15 +366,51 @@ void MainWindow::deleteAudioFiles(const std::vector<std::wstring>& filesToDelete
     }
 }
 
+// Dialog procedure for About dialog
+INT_PTR CALLBACK AboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_INITDIALOG:
+        {
+            // Set larger font for title
+            HWND hTitle = GetDlgItem(hDlg, IDC_STATIC_TITLE);
+            if (hTitle) {
+                HFONT hFont = CreateFont(
+                    18, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
+                    L"Segoe UI"
+                );
+                SendMessage(hTitle, WM_SETFONT, (WPARAM)hFont, TRUE);
+            }
+        }
+        return (INT_PTR)TRUE;
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+            // Clean up the custom font
+            HWND hTitle = GetDlgItem(hDlg, IDC_STATIC_TITLE);
+            if (hTitle) {
+                HFONT hFont = (HFONT)SendMessage(hTitle, WM_GETFONT, 0, 0);
+                if (hFont) {
+                    DeleteObject(hFont);
+                }
+            }
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
 void MainWindow::showAboutDialog() const
 {
-    const wchar_t aboutText[] =
-        L"Audio Studio\n"
-        L"Version 1.0.0\n\n"
-        L"A simple digital audio workstation (DAW) application.\n"
-        L"Developed using C++ and Win32 API.\n\n"
-        L"(c) 2024 Audio Studio Developers";
-	MessageBox(m_hwnd, aboutText, L"About Audio Studio", MB_OK | MB_ICONINFORMATION);
+    DialogBox(
+        Application::getInstance().getHInstance(),
+        MAKEINTRESOURCE(IDD_ABOUTBOX),
+        m_hwnd,
+        AboutDlgProc
+    );
 }
 
 void MainWindow::setupMenus() const {
@@ -422,7 +458,7 @@ void MainWindow::setupMenus() const {
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(viewMenu), L"&View");
 
     HMENU helpMenu = CreatePopupMenu();
-    AppendMenu(helpMenu, MF_STRING, ID_HELP_ABOUT, L"About");
+    AppendMenu(helpMenu, MF_STRING, ID_HELP_ABOUT, L"&About WavPlayer...");
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(helpMenu), L"&Help");
 
     SetMenu(m_hwnd, menuBar);
@@ -433,7 +469,7 @@ void MainWindow::updateWindowTitle() {
         return;
     }
 
-    std::wstring title = L"Audio Studio - " + m_project->getProjectName();
+    std::wstring title = L"WavPlayer - " + m_project->getProjectName();
     if (m_project->isModified()) {
         title += L" *";
     }

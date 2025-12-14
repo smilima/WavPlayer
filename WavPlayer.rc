@@ -53,6 +53,26 @@ END
 // remains consistent on all systems.
 IDI_WAVPLAYER           ICON                    "WavPlayer.ico"
 
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_ABOUTBOX DIALOGEX 0, 0, 280, 160
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About WavPlayer"
+FONT 8, "MS Shell Dlg", 400, 0, 0x1
+BEGIN
+    ICON            IDI_WAVPLAYER,IDC_STATIC_ICON,14,14,20,20
+    LTEXT           "WavPlayer",IDC_STATIC_TITLE,50,14,220,12,SS_NOPREFIX
+    LTEXT           "Version 1.0.0",IDC_STATIC_VERSION,50,30,220,8
+    LTEXT           "A modern digital audio workstation (DAW) application.",IDC_STATIC_DESCRIPTION,50,50,220,24
+    LTEXT           "Developed using C++ and Win32 API with Direct2D rendering.",IDC_STATIC,50,78,220,16
+    LTEXT           "© 2024 WavPlayer Developers",IDC_STATIC_COPYRIGHT,50,104,220,8
+    DEFPUSHBUTTON   "OK",IDOK,115,135,50,14
+END
+
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////
 
