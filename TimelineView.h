@@ -71,7 +71,7 @@ protected:
     void onMouseMove(int x, int y) override;
     void onMouseWheel(int x, int y, int delta) override;
     void onDoubleClick(int x, int y, int button) override;
-    void onHScroll(int request, int pos) override;
+    void onHScroll(HWND scrollBar, int request, int pos) override;
 
 private:
     void drawRuler(ID2D1RenderTarget* rt);
@@ -82,12 +82,25 @@ private:
     void drawWaveform(ID2D1RenderTarget* rt, const TrackRegion& region,
         float trackY, float trackHeight, const Color& color, bool isSelected);
     void drawPlayhead(ID2D1RenderTarget* rt);
+    void drawScrollbar(ID2D1RenderTarget* rt);
 
     double pixelToTime(int x) const;
     int timeToPixel(double time) const;
     double snapTime(double time) const;
     int getTrackAtY(int y) const;
     void ensurePlayheadVisible();
+    int getVisualHeight() const;
+
+    struct ScrollbarMetrics {
+        float barX = 0.0f;
+        float barY = 0.0f;
+        float barWidth = 0.0f;
+        float barHeight = 0.0f;
+        float thumbX = 0.0f;
+        float thumbWidth = 0.0f;
+    };
+
+    bool computeScrollbarMetrics(ScrollbarMetrics& metrics) const;
 
     // Track header button handling
     enum class TrackButton { None, Mute, Solo, Arm };
@@ -99,7 +112,6 @@ private:
     bool deleteSelectedRegion();
 
     void updateScrollMetrics();
-    void syncScrollBarPosition();
     double getMaxScrollX() const;
 
     // Track name editing
@@ -127,11 +139,13 @@ private:
     // Interaction state
     bool m_draggingPlayhead = false;
     bool m_draggingRegion = false;
+    bool m_draggingScrollbar = false;
     int m_selectedTrack = -1;
     int m_selectedRegion = -1;
     int m_dragStartX = 0;
     int m_dragStartY = 0;
     double m_dragStartTime = 0.0;
+    float m_scrollbarDragOffset = 0.0f;
 
     // Track name editing
     HWND m_editControl = nullptr;
@@ -140,4 +154,7 @@ private:
 
     PlayheadCallback m_onPlayheadChanged;
     RegionChangedCallback m_onRegionChanged;
+
+    bool m_scrollbarVisible = false;
+    float m_scrollbarHeightDip = 0.0f;
 };

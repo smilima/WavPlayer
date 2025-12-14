@@ -367,13 +367,11 @@ void AudioEngine::setPosition(double seconds) {
 }
 
 double AudioEngine::getPosition() const {
-    if (m_isPlaying && m_playbackStarted) {
-        auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::steady_clock::now() - m_playbackStartTime).count() / 1e6;
-        return elapsed;
-    } else {
-        return static_cast<double>(m_playbackPosition.load()) / m_waveFormat.nSamplesPerSec;
+    if (m_waveFormat.nSamplesPerSec == 0) {
+        return 0.0;
     }
+
+    return static_cast<double>(m_playbackPosition.load()) / m_waveFormat.nSamplesPerSec;
 }
 
 double AudioEngine::getDuration() const {

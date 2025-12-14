@@ -71,7 +71,7 @@ protected:
     virtual void onDoubleClick(int x, int y, int button) {}
     virtual void onKeyDown(int vkey) {}
     virtual void onKeyUp(int vkey) {}
-    virtual void onHScroll(int request, int pos) {}
+    virtual void onHScroll(HWND scrollBar, int request, int pos) {}
 
     bool createDeviceResources();
     void discardDeviceResources();

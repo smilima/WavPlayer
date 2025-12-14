@@ -31,7 +31,7 @@ public:
     // Playback
     void play();
     void pause();
-    void stop();
+    void stop(bool resetPlayhead = false);
     void togglePlayPause();
     
     // Recording
@@ -77,6 +77,8 @@ private:
     bool shouldDeleteTrackAudio(const std::shared_ptr<Track>& track,
         std::vector<std::wstring>& filesToDelete) const;
     void deleteAudioFiles(const std::vector<std::wstring>& filesToDelete);
+
+	void showAboutDialog() const;
     
     HWND m_hwnd = nullptr;
     UINT_PTR m_timerId = 0;

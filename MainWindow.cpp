@@ -1,8 +1,10 @@
 #include "MainWindow.h"
 #include "Application.h"
+
 #include <Shlwapi.h>
 #include <commdlg.h>
 #include <shellapi.h>
+
 #include <array>
 #include <algorithm>
 
@@ -45,6 +47,7 @@ enum MenuID {
     ID_VIEW_ZOOM_IN,
     ID_VIEW_ZOOM_OUT,
     ID_VIEW_ZOOM_FIT,
+    ID_HELP_ABOUT 
 };
 
 MainWindow::MainWindow() = default;
@@ -362,6 +365,17 @@ void MainWindow::deleteAudioFiles(const std::vector<std::wstring>& filesToDelete
     }
 }
 
+void MainWindow::showAboutDialog() const
+{
+    const wchar_t aboutText[] =
+        L"Audio Studio\n"
+        L"Version 1.0.0\n\n"
+        L"A simple digital audio workstation (DAW) application.\n"
+        L"Developed using C++ and Win32 API.\n\n"
+        L"(c) 2024 Audio Studio Developers";
+	MessageBox(m_hwnd, aboutText, L"About Audio Studio", MB_OK | MB_ICONINFORMATION);
+}
+
 void MainWindow::setupMenus() const {
     HMENU menuBar = CreateMenu();
 
@@ -405,6 +419,10 @@ void MainWindow::setupMenus() const {
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_OUT, L"Zoom &Out\tCtrl+-");
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_FIT, L"Zoom to &Fit\tCtrl+0");
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(viewMenu), L"&View");
+
+    HMENU helpMenu = CreatePopupMenu();
+    AppendMenu(helpMenu, MF_STRING, ID_HELP_ABOUT, L"About");
+    AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(helpMenu), L"&Help");
 
     SetMenu(m_hwnd, menuBar);
 }
@@ -475,7 +493,7 @@ void MainWindow::newProject() {
         return;
     }
 
-    stop();
+    stop(true);
     m_project->clear();
     addDefaultTrack();
     m_project->setModified(false);
@@ -504,7 +522,7 @@ bool MainWindow::openProject() {
         return false;
     }
 
-    stop();
+    stop(true);
 
     if (!m_project->load(filename)) {
         MessageBox(m_hwnd, L"Failed to open project file", L"Error", MB_OK | MB_ICONERROR);
@@ -611,6 +629,23 @@ void MainWindow::play() {
     ensureAudioEngineTracks();
     refreshProjectDuration();
 
+    if (!m_audioEngine) {
+        return;
+    }
+
+    // Use the current transport marker (timeline playhead) as the start point
+    double startPosition = 0.0;
+    if (m_timelineView) {
+        startPosition = m_timelineView->getPlayheadPosition();
+    }
+
+    if (!m_audioEngine->isPlaying()) {
+        m_audioEngine->setPosition(startPosition);
+        if (m_transportBar) {
+            m_transportBar->setPosition(startPosition);
+        }
+    }
+
     if (m_audioEngine->play()) {
         m_transportBar->setPlaying(true);
         m_timelineView->setFollowPlayhead(true);
@@ -624,15 +659,43 @@ void MainWindow::pause() {
     m_transportBar->setPlaying(false);
 }
 
-void MainWindow::stop() {
-    if (m_audioEngine->isRecording()) {
-        m_audioEngine->stopRecording();
-        m_transportBar->setRecording(false);
+void MainWindow::stop(bool resetPlayhead) {
+    double positionBeforeStop = 0.0;
+
+    if (m_timelineView) {
+        positionBeforeStop = m_timelineView->getPlayheadPosition();
     }
 
-    m_audioEngine->stop();
-    m_transportBar->setPlaying(false);
-    resetPlaybackToStart();
+    if (m_audioEngine) {
+        if (m_audioEngine->isRecording()) {
+            m_audioEngine->stopRecording();
+            if (m_transportBar) {
+                m_transportBar->setRecording(false);
+            }
+        }
+
+        positionBeforeStop = m_audioEngine->getPosition();
+        m_audioEngine->stop();
+    }
+
+    if (m_transportBar) {
+        m_transportBar->setPlaying(false);
+    }
+
+    if (resetPlayhead) {
+        resetPlaybackToStart();
+        return;
+    }
+
+    if (m_audioEngine) {
+        m_audioEngine->setPosition(positionBeforeStop);
+    }
+    if (m_timelineView) {
+        m_timelineView->setPlayheadPosition(positionBeforeStop);
+    }
+    if (m_transportBar) {
+        m_transportBar->setPosition(positionBeforeStop);
+    }
 }
 
 void MainWindow::togglePlayPause() {
@@ -909,6 +972,7 @@ void MainWindow::onCommand(int id) {
     case ID_VIEW_ZOOM_OUT:
         m_timelineView->setPixelsPerSecond(m_timelineView->getPixelsPerSecond() / 1.5);
         break;
+    
     default:
         break;
     }
@@ -925,7 +989,7 @@ void MainWindow::onDropFiles(HDROP hDrop) {
             loadAudioFile(filename);
         } else if (PathMatchSpec(filename, L"*.austd")) {
             if (promptSaveIfModified()) {
-                stop();
+                stop(true);
                 if (m_project->load(filename)) {
                     syncProjectToUI();
                     updateWindowTitle();

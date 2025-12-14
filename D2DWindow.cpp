@@ -306,7 +306,7 @@ LRESULT CALLBACK D2DWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         return 0;
 
     case WM_HSCROLL:
-        window->onHScroll(static_cast<int>(LOWORD(wParam)), static_cast<int>(HIWORD(wParam)));
+        window->onHScroll(reinterpret_cast<HWND>(lParam), static_cast<int>(LOWORD(wParam)), static_cast<int>(HIWORD(wParam)));
         return 0;
  
      case WM_KEYDOWN:
