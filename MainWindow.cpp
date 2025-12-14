@@ -372,8 +372,13 @@ void MainWindow::showAboutDialog() const
         L"Version 1.0.0\n\n"
         L"A simple digital audio workstation (DAW) application.\n"
         L"Developed using C++ and Win32 API.\n\n"
-        L"(c) 2024 Audio Studio Developers";
-	MessageBox(m_hwnd, aboutText, L"About Audio Studio", MB_OK | MB_ICONINFORMATION);
+        L"Features:\n"
+        L"  \u2022 Multi-track audio recording and playback\n"
+        L"  \u2022 WAV file import and export\n"
+        L"  \u2022 Real-time waveform visualization\n"
+        L"  \u2022 Project management\n\n"
+        L"(c) 2024-2025 Audio Studio Developers";
+    MessageBox(m_hwnd, aboutText, L"About Audio Studio", MB_OK | MB_ICONINFORMATION);
 }
 
 void MainWindow::setupMenus() const {
@@ -972,7 +977,10 @@ void MainWindow::onCommand(int id) {
     case ID_VIEW_ZOOM_OUT:
         m_timelineView->setPixelsPerSecond(m_timelineView->getPixelsPerSecond() / 1.5);
         break;
-    
+    case ID_HELP_ABOUT:
+        showAboutDialog();
+        break;
+
     default:
         break;
     }
