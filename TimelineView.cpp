@@ -909,7 +909,7 @@ void TimelineView::showTrackContextMenu(int x, int y) {
 
     // Convert DIP coordinates to screen coordinates
     POINT pt = { static_cast<LONG>(x), static_cast<LONG>(y) };
-    ClientToScreen(m_hwnd, &pt);
+    ClientToScreen(getHWND(), &pt);
 
     // Show the context menu
     int result = TrackPopupMenu(
@@ -917,7 +917,7 @@ void TimelineView::showTrackContextMenu(int x, int y) {
         TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD,
         pt.x, pt.y,
         0,
-        m_hwnd,
+        getHWND(),
         nullptr
     );
 
