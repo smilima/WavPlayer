@@ -59,18 +59,18 @@ IDI_WAVPLAYER           ICON                    "WavPlayer.ico"
 // Dialog
 //
 
-IDD_ABOUTBOX DIALOGEX 0, 0, 320, 200
+IDD_ABOUTBOX DIALOGEX 0, 0, 360, 220
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "About WavPlayer"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
-    ICON            IDI_WAVPLAYER,IDC_STATIC_ICON,14,14,96,96
-    LTEXT           "WavPlayer",IDC_STATIC_TITLE,125,24,180,20,SS_NOPREFIX
-    LTEXT           "Version 1.0.0",IDC_STATIC_VERSION,125,56,180,8
-    LTEXT           "A modern digital audio workstation (DAW) application.",IDC_STATIC_DESCRIPTION,125,72,180,16
-    LTEXT           "Developed using C++ and Win32 API with Direct2D rendering.",IDC_STATIC,125,94,180,16
-    LTEXT           "\xA9 2024 WavPlayer Developers",IDC_STATIC_COPYRIGHT,125,116,180,8
-    DEFPUSHBUTTON   "OK",IDOK,135,165,50,20
+    ICON            IDI_WAVPLAYER,IDC_STATIC_ICON,14,14,128,128
+    LTEXT           "WavPlayer",IDC_STATIC_TITLE,155,28,190,20,SS_NOPREFIX
+    LTEXT           "Version 1.0.0",IDC_STATIC_VERSION,155,60,190,8
+    LTEXT           "A modern digital audio workstation (DAW) application.",IDC_STATIC_DESCRIPTION,155,76,190,16
+    LTEXT           "Developed using C++ and Win32 API with Direct2D rendering.",IDC_STATIC,155,98,190,16
+    LTEXT           "Copyright \xA9 2024 WavPlayer Developers",IDC_STATIC_COPYRIGHT,155,120,190,8
+    DEFPUSHBUTTON   "OK",IDOK,155,180,50,20
 END
 
 #endif    // English (United States) resources
