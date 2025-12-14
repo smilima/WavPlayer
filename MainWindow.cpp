@@ -235,7 +235,6 @@ void MainWindow::resetPlaybackToStart() {
     }
     if (m_timelineView) {
         m_timelineView->setPlayheadPosition(0);
-        m_timelineView->setFollowPlayhead(true);
     }
     if (m_transportBar) {
         m_transportBar->setPosition(0);
@@ -648,7 +647,6 @@ void MainWindow::play() {
 
     if (m_audioEngine->play()) {
         m_transportBar->setPlaying(true);
-        m_timelineView->setFollowPlayhead(true);
     }
 }
 
@@ -742,7 +740,6 @@ void MainWindow::startRecording() {
 
     if (m_audioEngine->startRecording()) {
         m_transportBar->setRecording(true);
-        m_timelineView->setFollowPlayhead(true);
         m_audioEngine->play();
         m_transportBar->setPlaying(true);
         return;
