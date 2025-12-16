@@ -56,26 +56,33 @@ void SpectrumWindow::updateSpectrum(const float* samples, size_t sampleCount, in
 }
 
 void SpectrumWindow::performFFT(const std::vector<float>& samples) {
-    std::lock_guard<std::mutex> lock(m_dataMutex);
+    // Do all expensive FFT computation outside the lock
+    std::vector<std::complex<float>> fftBuffer(FFT_SIZE);
+    std::vector<float> magnitudes(FFT_SIZE / 2);
 
     // Apply Hann window and copy to FFT buffer
     for (int i = 0; i < FFT_SIZE; i++) {
         float window = 0.5f * (1.0f - std::cos(2.0f * M_PI * i / (FFT_SIZE - 1)));
-        m_fftBuffer[i] = std::complex<float>(samples[i] * window, 0.0f);
+        fftBuffer[i] = std::complex<float>(samples[i] * window, 0.0f);
     }
 
-    // Perform FFT
-    fft(m_fftBuffer, false);
+    // Perform FFT (expensive operation, no lock needed)
+    fft(fftBuffer, false);
 
     // Calculate magnitudes
     for (int i = 0; i < FFT_SIZE / 2; i++) {
-        float real = m_fftBuffer[i].real();
-        float imag = m_fftBuffer[i].imag();
-        m_magnitudes[i] = std::sqrt(real * real + imag * imag);
+        float real = fftBuffer[i].real();
+        float imag = fftBuffer[i].imag();
+        magnitudes[i] = std::sqrt(real * real + imag * imag);
     }
 
-    // Calculate band values
-    calculateBands();
+    // Only lock when updating shared state
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        m_fftBuffer = std::move(fftBuffer);
+        m_magnitudes = std::move(magnitudes);
+        calculateBands();
+    }
 }
 
 void SpectrumWindow::fft(std::vector<std::complex<float>>& buffer, bool inverse) {
@@ -203,6 +210,7 @@ float SpectrumWindow::BiquadFilter::process(float input, float& z1, float& z2) {
 }
 
 void SpectrumWindow::updateFilters() {
+    std::lock_guard<std::mutex> lock(m_dataMutex);
     for (int i = 0; i < NUM_BANDS; i++) {
         m_filters[i].calculatePeakingEQ(BAND_FREQUENCIES[i], m_eqGains[i], Q_FACTOR, m_sampleRate);
     }
@@ -210,16 +218,23 @@ void SpectrumWindow::updateFilters() {
 }
 
 void SpectrumWindow::applyEQ(float* samples, size_t frameCount, int sampleRate) {
-    if (m_sampleRate != sampleRate) {
-        m_sampleRate = sampleRate;
-        m_filtersInitialized = false;
+    bool needsUpdate = false;
+
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        if (m_sampleRate != sampleRate) {
+            m_sampleRate = sampleRate;
+            m_filtersInitialized = false;
+        }
+        needsUpdate = !m_filtersInitialized;
     }
 
-    if (!m_filtersInitialized) {
-        updateFilters();
+    if (needsUpdate) {
+        updateFilters();  // This also locks the mutex
     }
 
-    // Process each frame (stereo interleaved: L, R, L, R, ...)
+    // Process audio - filters are stable once initialized, so we can read without lock
+    // The filter coefficients won't change mid-processing because updateFilters() is protected
     for (size_t frame = 0; frame < frameCount; frame++) {
         float left = samples[frame * 2];
         float right = samples[frame * 2 + 1];
@@ -413,8 +428,11 @@ void SpectrumWindow::onMouseDown(int x, int y, int button) {
         // Update gain immediately
         float newGain = getGainFromY(y);
         if (std::abs(m_eqGains[slider] - newGain) > 0.1f) {
-            m_eqGains[slider] = newGain;
-            m_filtersInitialized = false;  // Force filter recalculation
+            {
+                std::lock_guard<std::mutex> lock(m_dataMutex);
+                m_eqGains[slider] = newGain;
+                m_filtersInitialized = false;  // Force filter recalculation
+            }
             invalidate();
         }
     }
@@ -433,9 +451,16 @@ void SpectrumWindow::onMouseUp(int x, int y, int button) {
 void SpectrumWindow::onMouseMove(int x, int y) {
     if (m_isDragging && m_draggedSlider >= 0) {
         float newGain = getGainFromY(y);
-        if (std::abs(m_eqGains[m_draggedSlider] - newGain) > 0.1f) {
-            m_eqGains[m_draggedSlider] = newGain;
-            m_filtersInitialized = false;  // Force filter recalculation
+        bool shouldUpdate = false;
+        {
+            std::lock_guard<std::mutex> lock(m_dataMutex);
+            if (std::abs(m_eqGains[m_draggedSlider] - newGain) > 0.1f) {
+                m_eqGains[m_draggedSlider] = newGain;
+                m_filtersInitialized = false;  // Force filter recalculation
+                shouldUpdate = true;
+            }
+        }
+        if (shouldUpdate) {
             invalidate();
         }
     }
