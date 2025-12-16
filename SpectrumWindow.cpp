@@ -282,8 +282,21 @@ float SpectrumWindow::getGainFromY(int y) {
 }
 
 void SpectrumWindow::onRender(ID2D1RenderTarget* rt) {
-    std::lock_guard<std::mutex> lock(m_dataMutex);
+    // Copy data we need for rendering (minimize critical section)
+    std::array<float, NUM_BANDS> bandValuesCopy;
+    std::array<float, NUM_BANDS> eqGainsCopy;
+    int draggedSliderCopy;
+    bool isDraggingCopy;
 
+    {
+        std::lock_guard<std::mutex> lock(m_dataMutex);
+        std::copy(m_bandValues.begin(), m_bandValues.begin() + NUM_BANDS, bandValuesCopy.begin());
+        eqGainsCopy = m_eqGains;
+        draggedSliderCopy = m_draggedSlider;
+        isDraggingCopy = m_isDragging;
+    }
+
+    // All rendering happens outside the lock
     // Clear background
     fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()),
              DAWColors::Background);
@@ -338,11 +351,11 @@ void SpectrumWindow::onRender(ID2D1RenderTarget* rt) {
     // Draw spectrum bars (dimmed, in background)
     for (int i = 0; i < NUM_BANDS; i++) {
         float x = margin + i * barWidth + barSpacing / 2;
-        float barHeight = m_bandValues[i] * usableHeight;
+        float barHeight = bandValuesCopy[i] * usableHeight;
         float y = height - bottomMargin - barHeight;
 
         // Dimmed gradient color
-        float hue = (1.0f - m_bandValues[i]) * 0.6f;
+        float hue = (1.0f - bandValuesCopy[i]) * 0.6f;
         Color barColor;
         if (hue > 0.33f) {
             barColor = Color(0.0f, (0.6f - hue) * 3.0f * 0.3f, 1.0f * 0.3f);
@@ -361,7 +374,7 @@ void SpectrumWindow::onRender(ID2D1RenderTarget* rt) {
         float x = margin + i * barWidth + barWidth / 2;
 
         // Calculate slider position from gain (-12 to +12 dB)
-        float normalizedGain = (12.0f - m_eqGains[i]) / 24.0f;  // 0 = +12dB, 1 = -12dB
+        float normalizedGain = (12.0f - eqGainsCopy[i]) / 24.0f;  // 0 = +12dB, 1 = -12dB
         float sliderY = topMargin + normalizedGain * usableHeight;
 
         // Draw vertical slider track
@@ -370,7 +383,7 @@ void SpectrumWindow::onRender(ID2D1RenderTarget* rt) {
                  DAWColors::GridLine, 2.0f);
 
         // Draw slider knob
-        bool isHovered = (m_draggedSlider == i && m_isDragging);
+        bool isHovered = (draggedSliderCopy == i && isDraggingCopy);
         Color knobColor = isHovered ? DAWColors::WaveformPeak : DAWColors::TextPrimary;
 
         float knobSize = 8.0f;
@@ -379,7 +392,7 @@ void SpectrumWindow::onRender(ID2D1RenderTarget* rt) {
         // Draw gain value if being dragged
         if (isHovered) {
             wchar_t gainLabel[16];
-            swprintf(gainLabel, 16, L"%+.1f", m_eqGains[i]);
+            swprintf(gainLabel, 16, L"%+.1f", eqGainsCopy[i]);
             drawText(gainLabel, trackX - 20, sliderY - 8, DAWColors::TextPrimary);
         }
     }

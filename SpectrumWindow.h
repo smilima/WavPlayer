@@ -28,6 +28,7 @@ protected:
     void onMouseDown(int x, int y, int button) override;
     void onMouseUp(int x, int y, int button) override;
     void onMouseMove(int x, int y) override;
+    bool onClose() override { return true; }  // Hide instead of destroy
 
 private:
     // FFT implementation
