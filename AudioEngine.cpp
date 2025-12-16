@@ -597,14 +597,29 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
         }
     }
 
-    // Call spectrum callback if set
-    if (m_spectrumCallback) {
-        // Convert int16 buffer to float for spectrum analysis
+    // Apply EQ and/or spectrum analysis if callbacks are set
+    if (m_eqCallback || m_spectrumCallback) {
+        // Convert int16 buffer to float for EQ/spectrum processing
         std::vector<float> floatSamples(frameCount * m_waveFormat.nChannels);
         for (size_t i = 0; i < frameCount * m_waveFormat.nChannels; ++i) {
             floatSamples[i] = buffer[i] / 32768.0f;
         }
-        m_spectrumCallback(floatSamples.data(), frameCount * m_waveFormat.nChannels, m_waveFormat.nSamplesPerSec);
+
+        // Apply EQ if callback is set
+        if (m_eqCallback) {
+            m_eqCallback(floatSamples.data(), frameCount, m_waveFormat.nSamplesPerSec);
+
+            // Convert back to int16 after EQ
+            for (size_t i = 0; i < frameCount * m_waveFormat.nChannels; ++i) {
+                float sample = std::clamp(floatSamples[i], -1.0f, 1.0f);
+                buffer[i] = static_cast<int16_t>(sample * 32767.0f);
+            }
+        }
+
+        // Call spectrum analyzer (after EQ if applied)
+        if (m_spectrumCallback) {
+            m_spectrumCallback(floatSamples.data(), frameCount * m_waveFormat.nChannels, m_waveFormat.nSamplesPerSec);
+        }
     }
 }
 

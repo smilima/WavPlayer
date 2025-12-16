@@ -183,6 +183,13 @@ void MainWindow::configureAudioCallbacks() {
             onRecordingComplete(std::move(clip));
         });
 
+        // Set up EQ callback
+        m_audioEngine->setEQCallback([this](float* samples, size_t frameCount, int sampleRate) {
+            if (m_spectrumWindow) {
+                m_spectrumWindow->applyEQ(samples, frameCount, sampleRate);
+            }
+        });
+
         // Set up spectrum callback
         m_audioEngine->setSpectrumCallback([this](const float* samples, size_t sampleCount, int sampleRate) {
             if (m_spectrumWindow) {
