@@ -36,14 +36,26 @@ public:
     
     // Get min/max values for waveform display (returns pairs of min,max for each block)
     // startTime/endTime are in seconds relative to clip start
-    std::vector<std::pair<float, float>> getWaveformData(size_t numBlocks, 
-                                                          double startTime = 0.0, 
+    std::vector<std::pair<float, float>> getWaveformData(size_t numBlocks,
+                                                          double startTime = 0.0,
                                                           double endTime = -1.0) const;
+
+    // Invalidate waveform cache (call when audio data changes)
+    void invalidateWaveformCache() const;
 
 private:
     std::vector<float> m_samples;  // Normalized to -1.0 to 1.0
     AudioFormat m_format;
     std::wstring m_filename;
+
+    // Waveform cache for performance
+    mutable struct WaveformCache {
+        std::vector<std::pair<float, float>> data;
+        size_t numBlocks = 0;
+        double startTime = 0.0;
+        double endTime = 0.0;
+        bool valid = false;
+    } m_waveformCache;
 };
 
 class AudioEngine {

@@ -80,7 +80,10 @@ private:
     
     // Clip cache
     std::map<std::wstring, std::shared_ptr<AudioClip>> m_clipCache;
-    
+
+    // Reverse mapping for fast clip->path lookup during serialization
+    mutable std::map<AudioClip*, std::wstring> m_clipToPathCache;
+
     // File format version
     static constexpr int FILE_VERSION = 1;
 };

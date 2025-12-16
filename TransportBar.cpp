@@ -4,18 +4,108 @@
 #include <iomanip>
 
 void TransportBar::setPosition(double seconds) {
-    m_position = seconds;
-    invalidate();
+    if (m_position != seconds) {
+        m_position = seconds;
+        invalidate();
+    }
 }
 
 void TransportBar::setDuration(double seconds) {
-    m_duration = seconds;
-    invalidate();
+    if (m_duration != seconds) {
+        m_duration = seconds;
+        invalidate();
+    }
 }
 
 void TransportBar::onResize(int width, int height) {
-    // Force buttons to be re-laid out with new dimensions
-    m_buttonsInitialized = false;
+    // Only re-layout if size actually changed
+    if (m_lastWidth != width || m_lastHeight != height) {
+        m_lastWidth = width;
+        m_lastHeight = height;
+        m_buttonsInitialized = false;
+    }
+}
+
+void TransportBar::initializeGeometries() {
+    if (m_playGeometry) return; // Already initialized
+
+    auto factory = Application::getInstance().getD2DFactory();
+
+    // Create Play geometry (triangle pointing right)
+    factory->CreatePathGeometry(&m_playGeometry);
+    if (m_playGeometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        m_playGeometry->Open(&sink);
+        if (sink) {
+            // Unit size triangle, will be scaled during rendering
+            float cx = 0.0f, cy = 0.0f, size = 1.0f;
+            sink->BeginFigure(D2D1::Point2F(-size * 0.4f, -size * 0.6f), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(size * 0.6f, 0.0f));
+            sink->AddLine(D2D1::Point2F(-size * 0.4f, size * 0.6f));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+            sink->Release();
+        }
+    }
+
+    // Create Rewind geometry (two triangles pointing left)
+    factory->CreatePathGeometry(&m_rewindGeometry);
+    if (m_rewindGeometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        m_rewindGeometry->Open(&sink);
+        if (sink) {
+            float triSize = 0.5f;
+            // First triangle
+            sink->BeginFigure(D2D1::Point2F(0.0f, -triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(-triSize, 0.0f));
+            sink->AddLine(D2D1::Point2F(0.0f, triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            // Second triangle
+            sink->BeginFigure(D2D1::Point2F(triSize, -triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(0.0f, 0.0f));
+            sink->AddLine(D2D1::Point2F(triSize, triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+            sink->Release();
+        }
+    }
+
+    // Create Fast Forward geometry (two triangles pointing right)
+    factory->CreatePathGeometry(&m_fastForwardGeometry);
+    if (m_fastForwardGeometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        m_fastForwardGeometry->Open(&sink);
+        if (sink) {
+            float triSize = 0.5f;
+            // First triangle
+            sink->BeginFigure(D2D1::Point2F(-triSize, -triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(0.0f, 0.0f));
+            sink->AddLine(D2D1::Point2F(-triSize, triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            // Second triangle
+            sink->BeginFigure(D2D1::Point2F(0.0f, -triSize), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(triSize, 0.0f));
+            sink->AddLine(D2D1::Point2F(0.0f, triSize));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+            sink->Release();
+        }
+    }
+}
+
+void TransportBar::releaseGeometries() {
+    if (m_playGeometry) {
+        m_playGeometry->Release();
+        m_playGeometry = nullptr;
+    }
+    if (m_rewindGeometry) {
+        m_rewindGeometry->Release();
+        m_rewindGeometry = nullptr;
+    }
+    if (m_fastForwardGeometry) {
+        m_fastForwardGeometry->Release();
+        m_fastForwardGeometry = nullptr;
+    }
 }
 
 void TransportBar::layoutButtons() {
@@ -50,42 +140,57 @@ void TransportBar::layoutButtons() {
 }
 
 void TransportBar::onRender(ID2D1RenderTarget* rt) {
+    // Initialize geometries on first render
+    if (!m_playGeometry) {
+        initializeGeometries();
+    }
+
     // Background
-    fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()), 
+    fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()),
              DAWColors::Transport);
-    
+
     // Top border
     drawLine(0, 0, static_cast<float>(getWidth()), 0, DAWColors::GridLine, 1.0f);
-    
+
     if (!m_buttonsInitialized) {
         layoutButtons();
     }
-    
+
     // Draw transport buttons
     for (const auto& btn : m_buttons) {
         drawButton(rt, btn);
     }
-    
-    // Time display ****************************************************8
+
+    // Time display - use cached strings when values haven't changed
     float timeX = 250.0f;
     float timeY = static_cast<float>(getHeight()) / 2.0f - 10.0f;
-    
-    // Current position
-    std::wstring posStr = formatTime(m_position);
-    drawText(posStr, timeX, timeY, DAWColors::TextPrimary, 120, 20);
-    
+
+    // Cache position string
+    if (m_cachedPosition != m_position) {
+        m_cachedPosition = m_position;
+        m_cachedPositionStr = formatTime(m_position);
+    }
+    drawText(m_cachedPositionStr, timeX, timeY, DAWColors::TextPrimary, 120, 20);
+
     // Separator
     drawText(L"/", timeX + 80, timeY, DAWColors::TextSecondary, 20, 20);
-    
-    // Duration
-    std::wstring durStr = formatTime(m_duration);
-    drawText(durStr, timeX + 100, timeY, DAWColors::TextSecondary, 120, 20);
-    
-    // BPM display
+
+    // Cache duration string
+    if (m_cachedDuration != m_duration) {
+        m_cachedDuration = m_duration;
+        m_cachedDurationStr = formatTime(m_duration);
+    }
+    drawText(m_cachedDurationStr, timeX + 100, timeY, DAWColors::TextSecondary, 120, 20);
+
+    // Cache BPM string
+    if (m_cachedBpm != m_bpm) {
+        m_cachedBpm = m_bpm;
+        std::wostringstream bpmStr;
+        bpmStr << std::fixed << std::setprecision(1) << m_bpm << L" BPM";
+        m_cachedBpmStr = bpmStr.str();
+    }
     float bpmX = static_cast<float>(getWidth()) - 150.0f;
-    std::wostringstream bpmStr;
-    bpmStr << std::fixed << std::setprecision(1) << m_bpm << L" BPM";
-    drawText(bpmStr.str(), bpmX, timeY, DAWColors::TextSecondary, 100, 20);
+    drawText(m_cachedBpmStr, bpmX, timeY, DAWColors::TextSecondary, 100, 20);
 }
 
 void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
@@ -123,28 +228,17 @@ void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
 }
 
 void TransportBar::drawPlayIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
-    // Triangle pointing right
-    ID2D1PathGeometry* geometry = nullptr;
-    Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
-    
-    if (geometry) {
-        ID2D1GeometrySink* sink = nullptr;
-        geometry->Open(&sink);
-        
-        if (sink) {
-            sink->BeginFigure(D2D1::Point2F(cx - size * 0.4f, cy - size * 0.6f), 
-                              D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(cx + size * 0.6f, cy));
-            sink->AddLine(D2D1::Point2F(cx - size * 0.4f, cy + size * 0.6f));
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            sink->Close();
-            sink->Release();
-            
-            getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
-            rt->FillGeometry(geometry, getBrush());
-        }
-        geometry->Release();
-    }
+    if (!m_playGeometry) return;
+
+    // Use cached geometry with transformation
+    D2D1::Matrix3x2F transform = D2D1::Matrix3x2F::Scale(size, size) *
+                                  D2D1::Matrix3x2F::Translation(cx, cy);
+    rt->SetTransform(transform);
+
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    rt->FillGeometry(m_playGeometry, getBrush());
+
+    rt->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 
 void TransportBar::drawPauseIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
@@ -167,72 +261,31 @@ void TransportBar::drawStopIcon(ID2D1RenderTarget* rt, float cx, float cy, float
 }
 
 void TransportBar::drawRewindIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    if (!m_rewindGeometry) return;
+
+    // Use cached geometry with transformation
+    D2D1::Matrix3x2F transform = D2D1::Matrix3x2F::Scale(size, size) *
+                                  D2D1::Matrix3x2F::Translation(cx, cy);
+    rt->SetTransform(transform);
+
     getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
-    
-    // Two triangles pointing left + bar
-    ID2D1PathGeometry* geometry = nullptr;
-    Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
-    
-    if (geometry) {
-        ID2D1GeometrySink* sink = nullptr;
-        geometry->Open(&sink);
-        
-        if (sink) {
-            float triSize = size * 0.5f;
-            
-            // First triangle
-            sink->BeginFigure(D2D1::Point2F(cx, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(cx - triSize, cy));
-            sink->AddLine(D2D1::Point2F(cx, cy + triSize));
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            
-            // Second triangle
-            sink->BeginFigure(D2D1::Point2F(cx + triSize, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(cx, cy));
-            sink->AddLine(D2D1::Point2F(cx + triSize, cy + triSize));
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            
-            sink->Close();
-            sink->Release();
-            
-            rt->FillGeometry(geometry, getBrush());
-        }
-        geometry->Release();
-    }
+    rt->FillGeometry(m_rewindGeometry, getBrush());
+
+    rt->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 
 void TransportBar::drawFastForwardIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    if (!m_fastForwardGeometry) return;
+
+    // Use cached geometry with transformation
+    D2D1::Matrix3x2F transform = D2D1::Matrix3x2F::Scale(size, size) *
+                                  D2D1::Matrix3x2F::Translation(cx, cy);
+    rt->SetTransform(transform);
+
     getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
-    
-    ID2D1PathGeometry* geometry = nullptr;
-    Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
-    
-    if (geometry) {
-        ID2D1GeometrySink* sink = nullptr;
-        geometry->Open(&sink);
-        
-        if (sink) {
-            float triSize = size * 0.5f;
-            
-            // First triangle
-            sink->BeginFigure(D2D1::Point2F(cx - triSize, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(cx, cy));
-            sink->AddLine(D2D1::Point2F(cx - triSize, cy + triSize));
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            
-            // Second triangle
-            sink->BeginFigure(D2D1::Point2F(cx, cy - triSize), D2D1_FIGURE_BEGIN_FILLED);
-            sink->AddLine(D2D1::Point2F(cx + triSize, cy));
-            sink->AddLine(D2D1::Point2F(cx, cy + triSize));
-            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-            
-            sink->Close();
-            sink->Release();
-            
-            rt->FillGeometry(geometry, getBrush());
-        }
-        geometry->Release();
-    }
+    rt->FillGeometry(m_fastForwardGeometry, getBrush());
+
+    rt->SetTransform(D2D1::Matrix3x2F::Identity());
 }
 
 void TransportBar::drawRecordIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {

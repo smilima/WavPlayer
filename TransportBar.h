@@ -7,6 +7,8 @@ public:
     using Callback = std::function<void()>;
     using PositionCallback = std::function<void(double)>;
 
+    ~TransportBar() { releaseGeometries(); }
+
     void setPlayCallback(Callback cb) { m_onPlay = cb; }
     void setStopCallback(Callback cb) { m_onStop = cb; }
     void setPauseCallback(Callback cb) { m_onPause = cb; }
@@ -14,12 +16,12 @@ public:
     void setFastForwardCallback(Callback cb) { m_onFastForward = cb; }
     void setRecordCallback(Callback cb) { m_onRecord = cb; }
 
-    void setPlaying(bool playing) { m_isPlaying = playing; invalidate(); }
-    void setRecording(bool recording) { m_isRecording = recording; invalidate(); }
+    void setPlaying(bool playing) { if (m_isPlaying != playing) { m_isPlaying = playing; invalidate(); } }
+    void setRecording(bool recording) { if (m_isRecording != recording) { m_isRecording = recording; invalidate(); } }
     bool isRecording() const { return m_isRecording; }
     void setPosition(double seconds);
     void setDuration(double seconds);
-    void setBPM(double bpm) { m_bpm = bpm; invalidate(); }
+    void setBPM(double bpm) { if (m_bpm != bpm) { m_bpm = bpm; invalidate(); } }
     void setHasAudioLoaded(bool loaded) { m_hasAudioLoaded = loaded; }
 
 protected:
@@ -45,11 +47,28 @@ private:
     void drawRewindIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
     void drawFastForwardIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
     void drawRecordIcon(ID2D1RenderTarget* rt, float cx, float cy, float size);
-    
+
+    void initializeGeometries();
+    void releaseGeometries();
     std::wstring formatTime(double seconds);
 
     std::vector<Button> m_buttons;
     bool m_buttonsInitialized = false;
+
+    // Cached geometries for performance
+    ID2D1PathGeometry* m_playGeometry = nullptr;
+    ID2D1PathGeometry* m_rewindGeometry = nullptr;
+    ID2D1PathGeometry* m_fastForwardGeometry = nullptr;
+
+    // Cached strings for performance
+    std::wstring m_cachedPositionStr;
+    std::wstring m_cachedDurationStr;
+    std::wstring m_cachedBpmStr;
+    double m_cachedPosition = -1.0;
+    double m_cachedDuration = -1.0;
+    double m_cachedBpm = -1.0;
+    int m_lastWidth = 0;
+    int m_lastHeight = 0;
 
     bool m_isPlaying = false;
     bool m_isRecording = false;

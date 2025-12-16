@@ -15,6 +15,8 @@ constexpr float SCROLLBAR_MIN_THUMB = 24.0f;
 }
 
 TimelineView::~TimelineView() {
+    releaseGeometries();
+
     if (m_editControl) {
         DestroyWindow(m_editControl);
         m_editControl = nullptr;
@@ -22,6 +24,35 @@ TimelineView::~TimelineView() {
     if (m_editFont) {
         DeleteObject(m_editFont);
         m_editFont = nullptr;
+    }
+}
+
+void TimelineView::initializeGeometries() {
+    if (m_playheadGeometry) return; // Already initialized
+
+    auto factory = Application::getInstance().getD2DFactory();
+
+    // Create Playhead geometry (triangle pointing down)
+    factory->CreatePathGeometry(&m_playheadGeometry);
+    if (m_playheadGeometry) {
+        ID2D1GeometrySink* sink = nullptr;
+        m_playheadGeometry->Open(&sink);
+        if (sink) {
+            // Unit size triangle, will be scaled during rendering
+            sink->BeginFigure(D2D1::Point2F(0.0f, 1.0f), D2D1_FIGURE_BEGIN_FILLED);
+            sink->AddLine(D2D1::Point2F(-1.0f, 0.0f));
+            sink->AddLine(D2D1::Point2F(1.0f, 0.0f));
+            sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink->Close();
+            sink->Release();
+        }
+    }
+}
+
+void TimelineView::releaseGeometries() {
+    if (m_playheadGeometry) {
+        m_playheadGeometry->Release();
+        m_playheadGeometry = nullptr;
     }
 }
 
@@ -110,14 +141,19 @@ void TimelineView::clearRegionSelection() {
 }
 
 void TimelineView::setPlayheadPosition(double seconds) {
-    m_playheadPosition = std::max(0.0, seconds);
+    double newPosition = std::max(0.0, seconds);
 
-    // Auto-scroll to keep playhead visible if follow mode is enabled
-    if (m_followPlayhead) {
-        ensurePlayheadVisible();
+    // Only invalidate if position actually changed
+    if (std::abs(m_playheadPosition - newPosition) > 1e-9) {
+        m_playheadPosition = newPosition;
+
+        // Auto-scroll to keep playhead visible if follow mode is enabled
+        if (m_followPlayhead) {
+            ensurePlayheadVisible();
+        }
+
+        invalidate();
     }
-
-    invalidate();
 }
 
 void TimelineView::ensurePlayheadVisible() {
@@ -158,8 +194,11 @@ void TimelineView::setScrollX(double x) {
 }
 
 void TimelineView::setScrollY(int y) {
-    m_scrollY = std::max(0, y);
-    invalidate();
+    int newScrollY = std::max(0, y);
+    if (m_scrollY != newScrollY) {
+        m_scrollY = newScrollY;
+        invalidate();
+    }
 }
 
 void TimelineView::updateScrollMetrics() {
@@ -176,6 +215,11 @@ void TimelineView::updateScrollMetrics() {
 }
 
 void TimelineView::onRender(ID2D1RenderTarget* rt) {
+    // Initialize geometries on first render
+    if (!m_playheadGeometry) {
+        initializeGeometries();
+    }
+
     // Clear background
     fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()),
         DAWColors::Background);
@@ -501,28 +545,17 @@ void TimelineView::drawPlayhead(ID2D1RenderTarget* rt) {
             static_cast<float>(x), bottom,
             DAWColors::Playhead, 2.0f);
 
-        // Playhead triangle at top
-        ID2D1PathGeometry* geometry = nullptr;
-        Application::getInstance().getD2DFactory()->CreatePathGeometry(&geometry);
+        // Playhead triangle at top - use cached geometry
+        if (m_playheadGeometry) {
+            float triSize = 8.0f;
+            D2D1::Matrix3x2F transform = D2D1::Matrix3x2F::Scale(triSize, RULER_HEIGHT) *
+                                          D2D1::Matrix3x2F::Translation(static_cast<float>(x), 0.0f);
+            rt->SetTransform(transform);
 
-        if (geometry) {
-            ID2D1GeometrySink* sink = nullptr;
-            geometry->Open(&sink);
+            getBrush()->SetColor(DAWColors::Playhead.toD2D());
+            rt->FillGeometry(m_playheadGeometry, getBrush());
 
-            if (sink) {
-                float triSize = 8;
-                sink->BeginFigure(D2D1::Point2F(static_cast<float>(x), RULER_HEIGHT),
-                    D2D1_FIGURE_BEGIN_FILLED);
-                sink->AddLine(D2D1::Point2F(static_cast<float>(x - triSize), 0));
-                sink->AddLine(D2D1::Point2F(static_cast<float>(x + triSize), 0));
-                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-                sink->Close();
-                sink->Release();
-
-                getBrush()->SetColor(DAWColors::Playhead.toD2D());
-                rt->FillGeometry(geometry, getBrush());
-            }
-            geometry->Release();
+            rt->SetTransform(D2D1::Matrix3x2F::Identity());
         }
     }
 }

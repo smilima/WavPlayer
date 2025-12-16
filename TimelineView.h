@@ -52,9 +52,9 @@ public:
     int getScrollY() const { return m_scrollY; }
 
     // Grid settings
-    void setBPM(double bpm) { m_bpm = bpm; invalidate(); }
+    void setBPM(double bpm) { if (m_bpm != bpm) { m_bpm = bpm; invalidate(); } }
     void setSnapToGrid(bool snap) { m_snapToGrid = snap; }
-    void setShowGrid(bool show) { m_showGrid = show; invalidate(); }
+    void setShowGrid(bool show) { if (m_showGrid != show) { m_showGrid = show; invalidate(); } }
 
     // Selection
     int getSelectedTrackIndex() const { return m_selectedTrack; }
@@ -87,6 +87,9 @@ private:
         float trackY, float trackHeight, const Color& color, bool isSelected);
     void drawPlayhead(ID2D1RenderTarget* rt);
     void drawScrollbar(ID2D1RenderTarget* rt);
+
+    void initializeGeometries();
+    void releaseGeometries();
 
     double pixelToTime(int x) const;
     int timeToPixel(double time) const;
@@ -164,4 +167,7 @@ private:
 
     bool m_scrollbarVisible = false;
     float m_scrollbarHeightDip = 0.0f;
+
+    // Cached geometries for performance
+    ID2D1PathGeometry* m_playheadGeometry = nullptr;
 };
