@@ -42,10 +42,13 @@ void SpectrumWindow::updateSpectrum(const float* samples, size_t sampleCount, in
 
     // Copy samples to FFT buffer (taking first FFT_SIZE samples)
     std::vector<float> audioSamples(FFT_SIZE, 0.0f);
-    size_t copyCount = std::min(sampleCount, static_cast<size_t>(FFT_SIZE));
 
-    // Convert stereo to mono if needed (assuming interleaved stereo)
-    for (size_t i = 0; i < copyCount && i * 2 + 1 < sampleCount; i++) {
+    // Assuming stereo interleaved: sampleCount is total samples, frames = sampleCount / 2
+    size_t frameCount = sampleCount / 2;
+    size_t copyFrames = std::min(frameCount, static_cast<size_t>(FFT_SIZE));
+
+    // Convert stereo to mono (averaging left and right channels)
+    for (size_t i = 0; i < copyFrames; i++) {
         audioSamples[i] = (samples[i * 2] + samples[i * 2 + 1]) * 0.5f;
     }
 
@@ -153,9 +156,16 @@ void SpectrumWindow::calculateBands() {
 
         float avgMagnitude = (count > 0) ? (sum / count) : 0.0f;
 
-        // Convert to dB scale and normalize (assuming max magnitude around 100)
-        float dB = 20.0f * std::log10(avgMagnitude + 1e-6f);
-        float normalized = (dB + 60.0f) / 60.0f;  // Map -60dB to 0, 0dB to 1
+        // Normalize magnitude relative to FFT size
+        // For a full-scale signal, FFT magnitude is approximately FFT_SIZE/2 after windowing
+        float normalizedMag = avgMagnitude / (FFT_SIZE / 4.0f);
+
+        // Convert to dB scale (with better range for typical audio)
+        float dB = 20.0f * std::log10(normalizedMag + 1e-10f);
+
+        // Map dB range to 0-1 (adjusted for better visualization)
+        // -80dB (quiet) -> 0, -20dB (loud) -> 1
+        float normalized = (dB + 80.0f) / 60.0f;
         normalized = std::max(0.0f, std::min(1.0f, normalized));
 
         // Apply smoothing
