@@ -4,6 +4,7 @@
 #include "TimelineView.h"
 #include "AudioEngine.h"
 #include "Project.h"
+#include "SpectrumWindow.h"
 #include <memory>
 #include <filesystem>
 #include <string>
@@ -87,6 +88,7 @@ private:
     std::unique_ptr<TimelineView> m_timelineView;
     std::unique_ptr<AudioEngine> m_audioEngine;
     std::unique_ptr<Project> m_project;
+    std::unique_ptr<SpectrumWindow> m_spectrumWindow;
 
     int m_nextTrackNumber = 2;
     int m_recordingCount = 0;
