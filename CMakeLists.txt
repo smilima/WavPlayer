@@ -12,24 +12,28 @@ endif()
 
 # Source files
 set(SOURCES
-    src/main.cpp
-    src/Application.cpp
-    src/D2DWindow.cpp
-    src/MainWindow.cpp
-    src/TransportBar.cpp
-    src/TimelineView.cpp
-    src/AudioEngine.cpp
-    src/Track.cpp
+    main.cpp
+    Application.cpp
+    D2DWindow.cpp
+    MainWindow.cpp
+    TransportBar.cpp
+    TimelineView.cpp
+    AudioEngine.cpp
+    Track.cpp
+    Project.cpp
+    SpectrumWindow.cpp
 )
 
 set(HEADERS
-    src/Application.h
-    src/D2DWindow.h
-    src/MainWindow.h
-    src/TransportBar.h
-    src/TimelineView.h
-    src/AudioEngine.h
-    src/Track.h
+    Application.h
+    D2DWindow.h
+    MainWindow.h
+    TransportBar.h
+    TimelineView.h
+    AudioEngine.h
+    Track.h
+    Project.h
+    SpectrumWindow.h
 )
 
 # Create executable

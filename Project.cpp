@@ -15,6 +15,7 @@ Project::Project() {
 void Project::clear() {
     m_tracks.clear();
     m_clipCache.clear();
+    m_clipToPathCache.clear();
     m_filename.clear();
     m_modified = false;
     m_bpm = 120.0;
@@ -39,19 +40,26 @@ std::shared_ptr<AudioClip> Project::getOrLoadClip(const std::wstring& filepath) 
     if (it != m_clipCache.end()) {
         return it->second;
     }
-    
+
     // Load the clip
     auto clip = std::make_shared<AudioClip>();
     if (clip->loadFromFile(filepath)) {
         m_clipCache[filepath] = clip;
+        // Maintain reverse mapping for O(1) serialization
+        m_clipToPathCache[clip.get()] = filepath;
         return clip;
     }
-    
+
     return nullptr;
 }
 
 void Project::removeClipFromCache(const std::wstring& filepath) {
-    m_clipCache.erase(filepath);
+    auto it = m_clipCache.find(filepath);
+    if (it != m_clipCache.end()) {
+        // Remove from reverse mapping as well
+        m_clipToPathCache.erase(it->second.get());
+        m_clipCache.erase(it);
+    }
 }
 
 std::wstring Project::getProjectName() const {
@@ -138,16 +146,16 @@ std::wstring Project::serializeProject() const {
             const auto& region = regions[r];
             
             ss << L"[Region:" << i << L":" << r << L"]\n";
-            
-            // Find the clip path from the cache
+
+            // Find the clip path from the reverse mapping (O(1) instead of O(n))
             std::wstring clipPath;
-            for (const auto& [path, clip] : m_clipCache) {
-                if (clip == region.clip) {
-                    clipPath = path;
-                    break;
+            if (region.clip) {
+                auto it = m_clipToPathCache.find(region.clip.get());
+                if (it != m_clipToPathCache.end()) {
+                    clipPath = it->second;
                 }
             }
-            
+
             ss << L"ClipPath=" << clipPath << L"\n";
             ss << L"StartTime=" << region.startTime << L"\n";
             ss << L"ClipOffset=" << region.clipOffset << L"\n";

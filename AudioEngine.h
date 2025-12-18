@@ -36,20 +36,34 @@ public:
     
     // Get min/max values for waveform display (returns pairs of min,max for each block)
     // startTime/endTime are in seconds relative to clip start
-    std::vector<std::pair<float, float>> getWaveformData(size_t numBlocks, 
-                                                          double startTime = 0.0, 
+    std::vector<std::pair<float, float>> getWaveformData(size_t numBlocks,
+                                                          double startTime = 0.0,
                                                           double endTime = -1.0) const;
+
+    // Invalidate waveform cache (call when audio data changes)
+    void invalidateWaveformCache() const;
 
 private:
     std::vector<float> m_samples;  // Normalized to -1.0 to 1.0
     AudioFormat m_format;
     std::wstring m_filename;
+
+    // Waveform cache for performance
+    mutable struct WaveformCache {
+        std::vector<std::pair<float, float>> data;
+        size_t numBlocks = 0;
+        double startTime = 0.0;
+        double endTime = 0.0;
+        bool valid = false;
+    } m_waveformCache;
 };
 
 class AudioEngine {
 public:
     using PositionCallback = std::function<void(double positionSeconds)>;
     using RecordingCallback = std::function<void(std::shared_ptr<AudioClip> recordedClip)>;
+    using SpectrumCallback = std::function<void(const float* samples, size_t sampleCount, int sampleRate)>;
+    using EQCallback = std::function<void(float* samples, size_t frameCount, int sampleRate)>;
 
     AudioEngine();
     ~AudioEngine();
@@ -97,6 +111,8 @@ public:
     // Callbacks
     void setPositionCallback(PositionCallback callback) { m_positionCallback = callback; }
     void setRecordingCallback(RecordingCallback callback) { m_recordingCallback = callback; }
+    void setSpectrumCallback(SpectrumCallback callback) { m_spectrumCallback = callback; }
+    void setEQCallback(EQCallback callback) { m_eqCallback = callback; }
 
     // Get current playback sample position
     size_t getPlaybackPosition() const { return m_playbackPosition; }
@@ -155,6 +171,8 @@ private:
     
     PositionCallback m_positionCallback;
     RecordingCallback m_recordingCallback;
+    SpectrumCallback m_spectrumCallback;
+    EQCallback m_eqCallback;
 
     std::chrono::steady_clock::time_point m_playbackStartTime;
     bool m_playbackStarted = false;

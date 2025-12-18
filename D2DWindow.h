@@ -72,6 +72,7 @@ protected:
     virtual void onKeyDown(int vkey) {}
     virtual void onKeyUp(int vkey) {}
     virtual void onHScroll(HWND scrollBar, int request, int pos) {}
+    virtual bool onClose() { return false; }  // Return true to hide instead of destroy
 
     bool createDeviceResources();
     void discardDeviceResources();

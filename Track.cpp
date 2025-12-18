@@ -28,27 +28,32 @@ void Track::getAudioAtTime(double time, float* leftOut, float* rightOut,
     if (m_muted || m_armed) return;
     
     for (const auto& region : m_regions) {
+        // Early exit: regions are sorted, so if we've passed the time, stop searching
+        if (time < region.startTime) break;
+
         if (time >= region.startTime && time < region.endTime()) {
             double clipTime = region.clipOffset + (time - region.startTime);
-            
+
             if (region.clip) {
                 const auto& samples = region.clip->getSamples();
                 const auto& format = region.clip->getFormat();
-                
+
                 size_t frameIndex = static_cast<size_t>(clipTime * format.sampleRate);
                 if (frameIndex < region.clip->getSampleCount()) {
                     float left = samples[frameIndex * format.channels];
-                    float right = (format.channels > 1) ? 
+                    float right = (format.channels > 1) ?
                                   samples[frameIndex * format.channels + 1] : left;
-                    
+
                     // Apply track volume and pan
                     float leftGain = m_volume * std::min(1.0f, 1.0f - m_pan);
                     float rightGain = m_volume * std::min(1.0f, 1.0f + m_pan);
-                    
+
                     *leftOut += left * leftGain;
                     *rightOut += right * rightGain;
                 }
             }
+            // Found matching region, no need to check further
+            break;
         }
     }
 }
