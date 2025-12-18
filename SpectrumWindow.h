@@ -72,6 +72,19 @@ private:
     std::vector<float> m_bandPeaks;       // Peak values for each band
     std::vector<float> m_bandFreqs;       // Center frequency for each band
 
+    // Pre-allocated buffer for stereo-to-mono conversion (avoids per-frame allocation)
+    std::vector<float> m_audioSampleBuffer;
+
+    // Pre-computed band frequency ranges (avoids per-frame sqrt calculations)
+    struct BandRange {
+        float freqStart;
+        float freqEnd;
+    };
+    std::array<BandRange, NUM_BANDS> m_bandRanges;
+
+    // Pre-computed FFT twiddle factors (avoids per-FFT sin/cos calculations)
+    std::vector<std::vector<std::complex<float>>> m_twiddleFactors;
+
     // EQ data
     std::array<float, NUM_BANDS> m_eqGains;           // Gain in dB (-12 to +12)
     std::array<BiquadFilter, NUM_BANDS> m_filters;    // One filter per band

@@ -13,9 +13,47 @@ SpectrumWindow::SpectrumWindow() {
     m_bandPeaks.resize(NUM_BANDS, 0.0f);
     m_bandFreqs.resize(NUM_BANDS);
 
+    // Pre-allocate audio sample buffer (avoids per-frame allocation)
+    m_audioSampleBuffer.resize(FFT_SIZE, 0.0f);
+
     // Use standard ISO graphic EQ center frequencies
     for (int i = 0; i < NUM_BANDS; i++) {
         m_bandFreqs[i] = BAND_FREQUENCIES[i];
+    }
+
+    // Pre-compute band frequency ranges (avoids per-frame sqrt calculations)
+    for (int band = 0; band < NUM_BANDS; band++) {
+        if (band == 0) {
+            m_bandRanges[band].freqStart = MIN_FREQ;
+            m_bandRanges[band].freqEnd = std::sqrt(BAND_FREQUENCIES[0] * BAND_FREQUENCIES[1]);
+        } else if (band == NUM_BANDS - 1) {
+            m_bandRanges[band].freqStart = std::sqrt(BAND_FREQUENCIES[NUM_BANDS - 2] * BAND_FREQUENCIES[NUM_BANDS - 1]);
+            m_bandRanges[band].freqEnd = MAX_FREQ;
+        } else {
+            m_bandRanges[band].freqStart = std::sqrt(BAND_FREQUENCIES[band - 1] * BAND_FREQUENCIES[band]);
+            m_bandRanges[band].freqEnd = std::sqrt(BAND_FREQUENCIES[band] * BAND_FREQUENCIES[band + 1]);
+        }
+    }
+
+    // Pre-compute FFT twiddle factors for forward transform (avoids per-FFT sin/cos)
+    // For each FFT stage (len = 2, 4, 8, ..., FFT_SIZE)
+    int numStages = 0;
+    for (int len = 2; len <= FFT_SIZE; len *= 2) {
+        numStages++;
+    }
+    m_twiddleFactors.resize(numStages);
+
+    int stage = 0;
+    for (int len = 2; len <= FFT_SIZE; len *= 2) {
+        int halfLen = len / 2;
+        m_twiddleFactors[stage].resize(halfLen);
+
+        float angle = -2.0f * M_PI / len; // Forward FFT uses negative angle
+        for (int j = 0; j < halfLen; j++) {
+            float theta = angle * j;
+            m_twiddleFactors[stage][j] = std::complex<float>(std::cos(theta), std::sin(theta));
+        }
+        stage++;
     }
 
     // Initialize EQ gains to 0 dB (flat response)
@@ -39,8 +77,8 @@ void SpectrumWindow::updateSpectrum(const float* samples, size_t sampleCount, in
 
     m_sampleRate = sampleRate;
 
-    // Copy samples to FFT buffer (taking first FFT_SIZE samples)
-    std::vector<float> audioSamples(FFT_SIZE, 0.0f);
+    // Use pre-allocated buffer instead of creating new vector
+    std::fill(m_audioSampleBuffer.begin(), m_audioSampleBuffer.end(), 0.0f);
 
     // Assuming stereo interleaved: sampleCount is total samples, frames = sampleCount / 2
     size_t frameCount = sampleCount / 2;
@@ -48,39 +86,32 @@ void SpectrumWindow::updateSpectrum(const float* samples, size_t sampleCount, in
 
     // Convert stereo to mono (averaging left and right channels)
     for (size_t i = 0; i < copyFrames; i++) {
-        audioSamples[i] = (samples[i * 2] + samples[i * 2 + 1]) * 0.5f;
+        m_audioSampleBuffer[i] = (samples[i * 2] + samples[i * 2 + 1]) * 0.5f;
     }
 
-    performFFT(audioSamples);
+    performFFT(m_audioSampleBuffer);
     invalidate();
 }
 
 void SpectrumWindow::performFFT(const std::vector<float>& samples) {
-    // Do all expensive FFT computation outside the lock
-    std::vector<std::complex<float>> fftBuffer(FFT_SIZE);
-    std::vector<float> magnitudes(FFT_SIZE / 2);
-
+    // Reuse class member buffers (already pre-allocated in constructor)
     // Apply Hann window and copy to FFT buffer
     for (int i = 0; i < FFT_SIZE; i++) {
         float window = 0.5f * (1.0f - std::cos(2.0f * M_PI * i / (FFT_SIZE - 1)));
-        fftBuffer[i] = std::complex<float>(samples[i] * window, 0.0f);
+        m_fftBuffer[i] = std::complex<float>(samples[i] * window, 0.0f);
     }
 
-    // Perform FFT (expensive operation, no lock needed)
-    fft(fftBuffer, false);
+    // Perform FFT (expensive operation, uses pre-computed twiddle factors)
+    fft(m_fftBuffer, false);
 
-    // Calculate magnitudes
-    for (int i = 0; i < FFT_SIZE / 2; i++) {
-        float real = fftBuffer[i].real();
-        float imag = fftBuffer[i].imag();
-        magnitudes[i] = std::sqrt(real * real + imag * imag);
-    }
-
-    // Only lock when updating shared state
+    // Calculate magnitudes (lock is inside calculateBands)
     {
         std::lock_guard<std::mutex> lock(m_dataMutex);
-        m_fftBuffer = std::move(fftBuffer);
-        m_magnitudes = std::move(magnitudes);
+        for (int i = 0; i < FFT_SIZE / 2; i++) {
+            float real = m_fftBuffer[i].real();
+            float imag = m_fftBuffer[i].imag();
+            m_magnitudes[i] = std::sqrt(real * real + imag * imag);
+        }
         calculateBands();
     }
 }
@@ -102,27 +133,46 @@ void SpectrumWindow::fft(std::vector<std::complex<float>>& buffer, bool inverse)
         j += k;
     }
 
-    // FFT computation
-    float sign = inverse ? 1.0f : -1.0f;
-    for (int len = 2; len <= n; len *= 2) {
-        float angle = sign * 2.0f * M_PI / len;
-        std::complex<float> wlen(std::cos(angle), std::sin(angle));
+    // FFT computation using pre-computed twiddle factors (forward only)
+    if (!inverse && n == FFT_SIZE && !m_twiddleFactors.empty()) {
+        // Use pre-computed twiddle factors for forward FFT
+        int stage = 0;
+        for (int len = 2; len <= n; len *= 2) {
+            int halfLen = len / 2;
+            for (int i = 0; i < n; i += len) {
+                for (int j = 0; j < halfLen; j++) {
+                    std::complex<float> w = m_twiddleFactors[stage][j];
+                    std::complex<float> u = buffer[i + j];
+                    std::complex<float> v = buffer[i + j + halfLen] * w;
+                    buffer[i + j] = u + v;
+                    buffer[i + j + halfLen] = u - v;
+                }
+            }
+            stage++;
+        }
+    } else {
+        // Fallback to runtime computation (for inverse or non-standard sizes)
+        float sign = inverse ? 1.0f : -1.0f;
+        for (int len = 2; len <= n; len *= 2) {
+            float angle = sign * 2.0f * M_PI / len;
+            std::complex<float> wlen(std::cos(angle), std::sin(angle));
 
-        for (int i = 0; i < n; i += len) {
-            std::complex<float> w(1.0f, 0.0f);
-            for (int j = 0; j < len / 2; j++) {
-                std::complex<float> u = buffer[i + j];
-                std::complex<float> v = buffer[i + j + len / 2] * w;
-                buffer[i + j] = u + v;
-                buffer[i + j + len / 2] = u - v;
-                w *= wlen;
+            for (int i = 0; i < n; i += len) {
+                std::complex<float> w(1.0f, 0.0f);
+                for (int j = 0; j < len / 2; j++) {
+                    std::complex<float> u = buffer[i + j];
+                    std::complex<float> v = buffer[i + j + len / 2] * w;
+                    buffer[i + j] = u + v;
+                    buffer[i + j + len / 2] = u - v;
+                    w *= wlen;
+                }
             }
         }
-    }
 
-    if (inverse) {
-        for (int i = 0; i < n; i++) {
-            buffer[i] /= static_cast<float>(n);
+        if (inverse) {
+            for (int i = 0; i < n; i++) {
+                buffer[i] /= static_cast<float>(n);
+            }
         }
     }
 }
@@ -131,20 +181,9 @@ void SpectrumWindow::calculateBands() {
     float freqPerBin = static_cast<float>(m_sampleRate) / FFT_SIZE;
 
     for (int band = 0; band < NUM_BANDS; band++) {
-        // Calculate frequency range for this band
-        float centerFreq = m_bandFreqs[band];
-        float freqStart, freqEnd;
-
-        if (band == 0) {
-            freqStart = MIN_FREQ;
-            freqEnd = std::sqrt(m_bandFreqs[0] * m_bandFreqs[1]);
-        } else if (band == NUM_BANDS - 1) {
-            freqStart = std::sqrt(m_bandFreqs[NUM_BANDS - 2] * m_bandFreqs[NUM_BANDS - 1]);
-            freqEnd = MAX_FREQ;
-        } else {
-            freqStart = std::sqrt(m_bandFreqs[band - 1] * m_bandFreqs[band]);
-            freqEnd = std::sqrt(m_bandFreqs[band] * m_bandFreqs[band + 1]);
-        }
+        // Use pre-computed band frequency ranges (avoids per-frame sqrt calculations)
+        float freqStart = m_bandRanges[band].freqStart;
+        float freqEnd = m_bandRanges[band].freqEnd;
 
         // Find corresponding FFT bins
         int binStart = static_cast<int>(freqStart / freqPerBin);

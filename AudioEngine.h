@@ -93,7 +93,7 @@ public:
     int getInputDevice() const { return m_inputDeviceIndex; }
 
     // Track management for mixing
-    void setTracks(std::vector<std::shared_ptr<Track>>* tracks) { m_tracks = tracks; }
+    void setTracks(std::vector<std::shared_ptr<Track>>* tracks);
     void setDuration(double duration) { m_duration = duration; }
     
     // Legacy single clip support (for simple playback)
@@ -148,11 +148,15 @@ private:
 
     std::shared_ptr<AudioClip> m_clip;
     std::vector<std::shared_ptr<Track>>* m_tracks = nullptr;  // Pointer to tracks for mixing
+    mutable std::mutex m_tracksMutex;  // Protects m_tracks access
     double m_duration = 0.0;  // Total project duration
     std::atomic<size_t> m_playbackPosition{0};
     std::atomic<bool> m_isPlaying{false};
     std::atomic<bool> m_isPaused{false};  // True if paused (vs stopped)
     std::atomic<float> m_volume{1.0f};
+
+    // Pre-allocated buffer for float conversion (avoids per-buffer allocation)
+    std::vector<float> m_floatConversionBuffer;
     
     // Recording members
     HWAVEIN m_waveIn = nullptr;
@@ -180,6 +184,6 @@ private:
     // Input monitoring buffer for real-time audio
     std::vector<float> m_inputMonitorBuffer;
     std::atomic<size_t> m_inputMonitorWritePos{0};
-    size_t m_inputMonitorReadPos = 0;
+    std::atomic<size_t> m_inputMonitorReadPos{0};  // Fixed: Made atomic for thread safety
     static constexpr size_t INPUT_MONITOR_BUFFER_SIZE = 8192;
 };

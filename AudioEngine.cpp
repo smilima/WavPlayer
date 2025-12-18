@@ -239,6 +239,10 @@ void AudioClip::invalidateWaveformCache() const {
 AudioEngine::AudioEngine() {
     // ... existing initialization ...
     m_inputMonitorBuffer.assign(INPUT_MONITOR_BUFFER_SIZE, 0.0f);
+
+    // Pre-allocate float conversion buffer (avoids per-buffer allocation in audio callback)
+    // Size: max buffer size * max channels (stereo)
+    m_floatConversionBuffer.resize(BUFFER_SIZE_FRAMES * 2);
 }
 
 AudioEngine::~AudioEngine() {
@@ -412,6 +416,12 @@ void AudioEngine::setClip(std::shared_ptr<AudioClip> clip) {
     }
 }
 
+void AudioEngine::setTracks(std::vector<std::shared_ptr<Track>>* tracks) {
+    // Protect track access with mutex to prevent race conditions with audio callback
+    std::lock_guard<std::mutex> lock(m_tracksMutex);
+    m_tracks = tracks;
+}
+
 void AudioEngine::setVolume(float volume) {
     m_volume = std::clamp(volume, 0.0f, 1.0f);
 }
@@ -450,39 +460,48 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
     double sampleRate = static_cast<double>(m_waveFormat.nSamplesPerSec);
     double duration = getDuration();
     size_t totalFrames = static_cast<size_t>(duration * sampleRate);
-    
+
     // If no duration, output silence
     if (totalFrames == 0 && !m_clip) {
         memset(buffer, 0, frameCount * m_waveFormat.nBlockAlign);
         return;
     }
-    
-    // Check if we have tracks to mix
-    if (m_tracks && m_duration > 0.0) {
-        // Pre-filter tracks to avoid checking conditions in the hot path (frame loop)
-        // This optimization reduces checks from O(tracks * frames) to O(tracks + frames)
-        std::vector<Track*> activeTracks;
-        activeTracks.reserve(m_tracks->size());
 
-        // Check if any track is soloed
-        bool hasSolo = false;
-        for (const auto& track : *m_tracks) {
-            if (track->isSolo() && track->isVisible()) {
-                hasSolo = true;
-                break;
+    // Check if we have tracks to mix
+    // Use lock to safely access m_tracks (prevents race condition with setTracks)
+    std::vector<Track*> activeTracks;
+    {
+        std::lock_guard<std::mutex> lock(m_tracksMutex);
+        if (m_tracks && m_duration > 0.0) {
+            // Pre-filter tracks to avoid checking conditions in the hot path (frame loop)
+            // This optimization reduces checks from O(tracks * frames) to O(tracks + frames)
+            activeTracks.reserve(m_tracks->size());
+
+            // Check if any track is soloed
+            bool hasSolo = false;
+            for (const auto& track : *m_tracks) {
+                if (track->isSolo() && track->isVisible()) {
+                    hasSolo = true;
+                    break;
+                }
+            }
+
+            // Build list of tracks that should be processed
+            for (const auto& track : *m_tracks) {
+                if (!track->isVisible()) continue;
+                if (track->isMuted()) continue;
+                if (hasSolo && !track->isSolo()) continue;
+                activeTracks.push_back(track.get());
             }
         }
+    } // Release lock here
 
-        // Build list of tracks that should be processed
-        for (const auto& track : *m_tracks) {
-            if (!track->isVisible()) continue;
-            if (track->isMuted()) continue;
-            if (hasSolo && !track->isSolo()) continue;
-            activeTracks.push_back(track.get());
-        }
+    if (!activeTracks.empty() && m_duration > 0.0) {
+        // Pre-calculate time increment to avoid per-frame division
+        double currentTime = static_cast<double>(pos) / sampleRate;
+        const double timeIncrement = 1.0 / sampleRate;
 
         for (size_t frame = 0; frame < frameCount; ++frame) {
-            double currentTime = static_cast<double>(pos + frame) / sampleRate;
 
             if (pos + frame >= totalFrames) {
                 // End of project - output silence
@@ -502,29 +521,34 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
                     leftMix += left;
                     rightMix += right;
                 }
-                
+
                 // Mix in input monitoring if enabled
                 if (m_inputMonitoring) {
-                    float inputLeft = m_inputMonitorBuffer[m_inputMonitorReadPos];
-                    m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
-                    float inputRight = (m_waveFormat.nChannels > 1) ? m_inputMonitorBuffer[m_inputMonitorReadPos] : inputLeft;
-                    m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    size_t readPos = m_inputMonitorReadPos.load();
+                    float inputLeft = m_inputMonitorBuffer[readPos];
+                    readPos = (readPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    float inputRight = (m_waveFormat.nChannels > 1) ? m_inputMonitorBuffer[readPos] : inputLeft;
+                    readPos = (readPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    m_inputMonitorReadPos.store(readPos);
                     leftMix += inputLeft;
                     rightMix += inputRight;
                 }
-                
+
                 // Apply master volume and clamp
                 leftMix *= masterVolume;
                 rightMix *= masterVolume;
                 leftMix = std::clamp(leftMix, -1.0f, 1.0f);
                 rightMix = std::clamp(rightMix, -1.0f, 1.0f);
-                
+
                 // Convert to int16
                 buffer[frame * m_waveFormat.nChannels] = static_cast<int16_t>(leftMix * 32767.0f);
                 if (m_waveFormat.nChannels > 1) {
                     buffer[frame * m_waveFormat.nChannels + 1] = static_cast<int16_t>(rightMix * 32767.0f);
                 }
             }
+
+            // Increment time for next frame (avoids per-frame division)
+            currentTime += timeIncrement;
         }
         
         // Advance playback position
@@ -562,8 +586,9 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
                     
                     // Mix in input monitoring if enabled
                     if (m_inputMonitoring) {
-                        float inputSample = m_inputMonitorBuffer[m_inputMonitorReadPos];
-                        m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                        size_t readPos = m_inputMonitorReadPos.load();
+                        float inputSample = m_inputMonitorBuffer[readPos];
+                        m_inputMonitorReadPos.store((readPos + 1) % INPUT_MONITOR_BUFFER_SIZE);
                         sample += inputSample;
                     }
                     
@@ -585,8 +610,9 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
         if (m_inputMonitoring) {
             for (size_t frame = 0; frame < frameCount; ++frame) {
                 for (uint16_t ch = 0; ch < m_waveFormat.nChannels; ++ch) {
-                    float inputSample = m_inputMonitorBuffer[m_inputMonitorReadPos];
-                    m_inputMonitorReadPos = (m_inputMonitorReadPos + 1) % INPUT_MONITOR_BUFFER_SIZE;
+                    size_t readPos = m_inputMonitorReadPos.load();
+                    float inputSample = m_inputMonitorBuffer[readPos];
+                    m_inputMonitorReadPos.store((readPos + 1) % INPUT_MONITOR_BUFFER_SIZE);
                     inputSample *= masterVolume;
                     inputSample = std::clamp(inputSample, -1.0f, 1.0f);
                     buffer[frame * m_waveFormat.nChannels + ch] = static_cast<int16_t>(inputSample * 32767.0f);
@@ -599,26 +625,33 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
 
     // Apply EQ and/or spectrum analysis if callbacks are set
     if (m_eqCallback || m_spectrumCallback) {
+        // Use pre-allocated buffer to avoid per-buffer allocation
+        size_t sampleCount = frameCount * m_waveFormat.nChannels;
+        if (m_floatConversionBuffer.size() < sampleCount) {
+            m_floatConversionBuffer.resize(sampleCount);
+        }
+
         // Convert int16 buffer to float for EQ/spectrum processing
-        std::vector<float> floatSamples(frameCount * m_waveFormat.nChannels);
-        for (size_t i = 0; i < frameCount * m_waveFormat.nChannels; ++i) {
-            floatSamples[i] = buffer[i] / 32768.0f;
+        for (size_t i = 0; i < sampleCount; ++i) {
+            m_floatConversionBuffer[i] = buffer[i] / 32768.0f;
         }
 
         // Apply EQ if callback is set
         if (m_eqCallback) {
-            m_eqCallback(floatSamples.data(), frameCount, m_waveFormat.nSamplesPerSec);
+            m_eqCallback(m_floatConversionBuffer.data(), frameCount, m_waveFormat.nSamplesPerSec);
 
             // Convert back to int16 after EQ
-            for (size_t i = 0; i < frameCount * m_waveFormat.nChannels; ++i) {
-                float sample = std::clamp(floatSamples[i], -1.0f, 1.0f);
+            for (size_t i = 0; i < sampleCount; ++i) {
+                float sample = std::clamp(m_floatConversionBuffer[i], -1.0f, 1.0f);
                 buffer[i] = static_cast<int16_t>(sample * 32767.0f);
             }
         }
 
-        // Call spectrum analyzer (after EQ if applied)
+        // Call spectrum analyzer with EQ'd samples (if EQ was applied)
+        // Note: If EQ was applied, buffer has been updated and floatConversionBuffer has EQ'd data
+        // If no EQ, floatConversionBuffer has original data
         if (m_spectrumCallback) {
-            m_spectrumCallback(floatSamples.data(), frameCount * m_waveFormat.nChannels, m_waveFormat.nSamplesPerSec);
+            m_spectrumCallback(m_floatConversionBuffer.data(), sampleCount, m_waveFormat.nSamplesPerSec);
         }
     }
 }
@@ -703,17 +736,24 @@ void AudioEngine::shutdownRecording() {
 
 bool AudioEngine::startRecording() {
     if (m_isRecording) return true;
-    
+
     // Initialize recording device if needed
     if (!initializeRecording()) {
         return false;
     }
-    
-    // Clear any previous recorded data
+
+    // Clear any previous recorded data and pre-allocate to avoid O(N²) growth
     {
         std::lock_guard<std::mutex> lock(m_recordMutex);
         m_recordedSamples.clear();
+        // Pre-allocate for ~30 seconds at 44.1kHz stereo (reduces reallocations)
+        // 30 seconds * 44100 samples/sec * 2 channels = 2,646,000 samples
+        m_recordedSamples.reserve(30 * m_waveFormat.nSamplesPerSec * m_waveFormat.nChannels);
     }
+
+    // Clear pending samples buffer and pre-allocate
+    m_pendingSamples.clear();
+    m_pendingSamples.reserve(m_waveFormat.nSamplesPerSec * m_waveFormat.nChannels); // 1 second buffer
     
     // If input monitoring is enabled and we're not already playing, start playback to hear tracks
     if (m_inputMonitoring && !m_isPlaying && (m_duration > 0.0 || m_clip)) {
