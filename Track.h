@@ -22,10 +22,10 @@ public:
     void setName(const std::wstring& name) { m_name = name; }
     
     float getVolume() const { return m_volume; }
-    void setVolume(float volume) { m_volume = std::clamp(volume, 0.0f, 1.0f); }
-    
+    void setVolume(float volume);
+
     float getPan() const { return m_pan; }
-    void setPan(float pan) { m_pan = std::clamp(pan, -1.0f, 1.0f); }
+    void setPan(float pan);
     
     bool isMuted() const { return m_muted; }
     void setMuted(bool muted) { m_muted = muted; }
@@ -58,6 +58,8 @@ public:
                         uint32_t sampleRate) const;
 
 private:
+    void updateGains();  // Update cached gains when volume or pan changes
+
     std::wstring m_name;
     float m_volume = 1.0f;
     float m_pan = 0.0f;  // -1.0 (left) to 1.0 (right)
@@ -65,9 +67,13 @@ private:
     bool m_solo = false;
     bool m_armed = false;
     bool m_visible = false;  // Explicitly visible even without regions
-    
+
     int m_height = 100;
     uint32_t m_color = 0xFF4A90D9;  // Default blue color (ARGB)
-    
+
     std::vector<TrackRegion> m_regions;
+
+    // Cached gain values (updated when volume or pan changes)
+    mutable float m_cachedLeftGain = 1.0f;
+    mutable float m_cachedRightGain = 1.0f;
 };

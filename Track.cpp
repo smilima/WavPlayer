@@ -1,7 +1,25 @@
 #include "Track.h"
 #include <cmath>
 
-Track::Track(const std::wstring& name) : m_name(name) {}
+Track::Track(const std::wstring& name) : m_name(name) {
+    updateGains();  // Initialize cached gains
+}
+
+void Track::setVolume(float volume) {
+    m_volume = std::clamp(volume, 0.0f, 1.0f);
+    updateGains();
+}
+
+void Track::setPan(float pan) {
+    m_pan = std::clamp(pan, -1.0f, 1.0f);
+    updateGains();
+}
+
+void Track::updateGains() {
+    // Cache gain calculations to avoid per-sample computation
+    m_cachedLeftGain = m_volume * std::min(1.0f, 1.0f - m_pan);
+    m_cachedRightGain = m_volume * std::min(1.0f, 1.0f + m_pan);
+}
 
 void Track::addRegion(const TrackRegion& region) {
     m_regions.push_back(region);
@@ -44,12 +62,9 @@ void Track::getAudioAtTime(double time, float* leftOut, float* rightOut,
                     float right = (format.channels > 1) ?
                                   samples[frameIndex * format.channels + 1] : left;
 
-                    // Apply track volume and pan
-                    float leftGain = m_volume * std::min(1.0f, 1.0f - m_pan);
-                    float rightGain = m_volume * std::min(1.0f, 1.0f + m_pan);
-
-                    *leftOut += left * leftGain;
-                    *rightOut += right * rightGain;
+                    // Apply cached track volume and pan gains (updated when volume/pan changes)
+                    *leftOut += left * m_cachedLeftGain;
+                    *rightOut += right * m_cachedRightGain;
                 }
             }
             // Found matching region, no need to check further
