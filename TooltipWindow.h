@@ -8,7 +8,7 @@ public:
     ~TooltipWindow();
 
     bool create(HWND parent);
-    void show(const std::wstring& text, int screenX, int screenY);
+    void show(const std::wstring& text, int screenX, int screenY, bool positionAbove = true);
     void hide();
 
 private:

@@ -419,6 +419,10 @@ void TransportBar::onMouseUp(int x, int y, int button) {
    }
 
 void TransportBar::onMouseMove(int x, int y) {
+    // Track mouse position for tooltip positioning
+    m_lastMouseX = x;
+    m_lastMouseY = y;
+
     bool needsRedraw = false;
     int currentHoveredIndex = -1;
 
@@ -509,12 +513,12 @@ void TransportBar::updateTooltip() {
 
     const auto& btn = m_buttons[m_tooltipButtonIndex];
 
-    // Convert button position to screen coordinates
+    // Convert mouse position to screen coordinates
     POINT pt;
-    pt.x = static_cast<LONG>(btn.x + btn.w / 2.0f);
-    pt.y = static_cast<LONG>(btn.y);
+    pt.x = static_cast<LONG>(m_lastMouseX);
+    pt.y = static_cast<LONG>(m_lastMouseY);
     ClientToScreen(getHWND(), &pt);
 
-    // Show tooltip popup at screen coordinates
-    m_tooltip.show(btn.tooltip, pt.x, pt.y);
+    // Show tooltip popup above the mouse cursor
+    m_tooltip.show(btn.tooltip, pt.x, pt.y, true);
 }

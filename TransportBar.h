@@ -100,4 +100,6 @@ private:
     static const UINT_PTR TOOLTIP_TIMER_ID = 1001;
     int m_tooltipButtonIndex = -1;
     bool m_showTooltip = false;
+    int m_lastMouseX = 0;
+    int m_lastMouseY = 0;
 };
