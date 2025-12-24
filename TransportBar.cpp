@@ -1,5 +1,6 @@
 #include "TransportBar.h"
 #include "Application.h"
+#include "TooltipWindow.h"
 #include <sstream>
 #include <iomanip>
 
@@ -117,28 +118,34 @@ void TransportBar::layoutButtons() {
     float centerY = static_cast<float>(getHeight()) / 2.0f - btnSize / 2.0f;
 
     // Follow Playhead
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FollowPlayhead});
+    Button followBtn = {startX, centerY, btnSize, btnSize, Button::FollowPlayhead, false, false, getTooltipForButton(Button::FollowPlayhead)};
+    m_buttons.push_back(followBtn);
     startX += btnSize + spacing;
 
     // Rewind
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Rewind});
+    Button rewindBtn = {startX, centerY, btnSize, btnSize, Button::Rewind, false, false, getTooltipForButton(Button::Rewind)};
+    m_buttons.push_back(rewindBtn);
     startX += btnSize + spacing;
 
     // Stop
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Stop});
+    Button stopBtn = {startX, centerY, btnSize, btnSize, Button::Stop, false, false, getTooltipForButton(Button::Stop)};
+    m_buttons.push_back(stopBtn);
     startX += btnSize + spacing;
 
     // Play/Pause - only show Pause if playing AND audio is loaded
     Button::Type playType = (m_isPlaying && m_hasAudioLoaded) ? Button::Pause : Button::Play;
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, playType});
+    Button playBtn = {startX, centerY, btnSize, btnSize, playType, false, false, getTooltipForButton(playType)};
+    m_buttons.push_back(playBtn);
     startX += btnSize + spacing;
 
     // Fast Forward
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FastForward});
+    Button ffBtn = {startX, centerY, btnSize, btnSize, Button::FastForward, false, false, getTooltipForButton(Button::FastForward)};
+    m_buttons.push_back(ffBtn);
     startX += btnSize + spacing;
 
     // Record
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Record});
+    Button recBtn = {startX, centerY, btnSize, btnSize, Button::Record, false, false, getTooltipForButton(Button::Record)};
+    m_buttons.push_back(recBtn);
 
     m_buttonsInitialized = true;
 }
@@ -147,6 +154,13 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
     // Initialize geometries on first render
     if (!m_playGeometry) {
         initializeGeometries();
+    }
+
+    // Initialize tooltip window on first render
+    static bool tooltipInitialized = false;
+    if (!tooltipInitialized && getHWND()) {
+        m_tooltip.create(getHWND());
+        tooltipInitialized = true;
     }
 
     // Background
@@ -405,19 +419,76 @@ void TransportBar::onMouseUp(int x, int y, int button) {
    }
 
 void TransportBar::onMouseMove(int x, int y) {
+    // Track mouse position for tooltip positioning
+    m_lastMouseX = x;
+    m_lastMouseY = y;
+
     bool needsRedraw = false;
-    
-    for (auto& btn : m_buttons) {
+    int currentHoveredIndex = -1;
+
+    for (size_t i = 0; i < m_buttons.size(); ++i) {
+        auto& btn = m_buttons[i];
         bool wasHovered = btn.hovered;
         btn.hovered = (x >= btn.x && x <= btn.x + btn.w &&
                        y >= btn.y && y <= btn.y + btn.h);
+
+        if (btn.hovered) {
+            currentHoveredIndex = static_cast<int>(i);
+        }
+
         if (wasHovered != btn.hovered) {
             needsRedraw = true;
         }
     }
-    
+
+    // Track tooltip timing using Windows timer
+    if (currentHoveredIndex != m_tooltipButtonIndex) {
+        // Hovering over a different button (or no button)
+        KillTimer(getHWND(), TOOLTIP_TIMER_ID);
+        m_showTooltip = false;
+        m_tooltip.hide();  // Hide popup tooltip
+        m_tooltipButtonIndex = currentHoveredIndex;
+
+        if (currentHoveredIndex >= 0) {
+            // Start a new timer for 500ms
+            SetTimer(getHWND(), TOOLTIP_TIMER_ID, 500, nullptr);
+        }
+
+        needsRedraw = true;
+    }
+
     if (needsRedraw) {
         invalidate();
+    }
+}
+
+void TransportBar::onMouseLeave() {
+    // Mouse left the window, hide tooltip and clear all hover states
+    KillTimer(getHWND(), TOOLTIP_TIMER_ID);
+    m_showTooltip = false;
+    m_tooltip.hide();
+    m_tooltipButtonIndex = -1;
+
+    // Clear all button hover states
+    bool needsRedraw = false;
+    for (auto& btn : m_buttons) {
+        if (btn.hovered) {
+            btn.hovered = false;
+            needsRedraw = true;
+        }
+    }
+
+    if (needsRedraw) {
+        invalidate();
+    }
+}
+
+void TransportBar::onTimer(UINT_PTR timerId) {
+    if (timerId == TOOLTIP_TIMER_ID) {
+        // Tooltip delay has elapsed, show the tooltip
+        m_showTooltip = true;
+        KillTimer(getHWND(), TOOLTIP_TIMER_ID);
+        updateTooltip();
     }
 }
 
@@ -425,10 +496,54 @@ std::wstring TransportBar::formatTime(double seconds) {
     int mins = static_cast<int>(seconds) / 60;
     int secs = static_cast<int>(seconds) % 60;
     int ms = static_cast<int>((seconds - static_cast<int>(seconds)) * 1000);
-    
+
     std::wostringstream ss;
     ss << std::setfill(L'0') << std::setw(2) << mins << L":"
        << std::setw(2) << secs << L"."
        << std::setw(3) << ms;
     return ss.str();
+}
+
+std::wstring TransportBar::getTooltipForButton(Button::Type type) const {
+    switch (type) {
+        case Button::FollowPlayhead:
+            return L"Follow Playhead";
+        case Button::Play:
+            return L"Play";
+        case Button::Pause:
+            return L"Pause";
+        case Button::Stop:
+            return L"Stop";
+        case Button::Rewind:
+            return L"Rewind";
+        case Button::FastForward:
+            return L"Fast Forward";
+        case Button::Record:
+            return L"Record";
+        default:
+            return L"";
+    }
+}
+
+void TransportBar::updateTooltip() {
+    if (!m_showTooltip || m_tooltipButtonIndex < 0 ||
+        m_tooltipButtonIndex >= static_cast<int>(m_buttons.size())) {
+        m_tooltip.hide();
+        return;
+    }
+
+    const auto& btn = m_buttons[m_tooltipButtonIndex];
+
+    // Convert DIP coordinates to physical pixels, then to screen coordinates
+    // Mouse coordinates are in DIPs due to DPI scaling in D2DWindow
+    int physicalX = static_cast<int>(dipsToPixelsX(static_cast<float>(m_lastMouseX)));
+    int physicalY = static_cast<int>(dipsToPixelsY(static_cast<float>(m_lastMouseY)));
+
+    POINT pt;
+    pt.x = physicalX;
+    pt.y = physicalY;
+    ClientToScreen(getHWND(), &pt);
+
+    // Show tooltip popup above the mouse cursor
+    m_tooltip.show(btn.tooltip, pt.x, pt.y, true);
 }

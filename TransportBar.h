@@ -1,5 +1,6 @@
 #pragma once
 #include "D2DWindow.h"
+#include "TooltipWindow.h"
 #include <functional>
 
 class TransportBar : public D2DWindow {
@@ -32,6 +33,8 @@ protected:
     void onMouseDown(int x, int y, int button) override;
     void onMouseUp(int x, int y, int button) override;
     void onMouseMove(int x, int y) override;
+    void onMouseLeave() override;
+    void onTimer(UINT_PTR timerId) override;
 
 private:
     struct Button {
@@ -39,6 +42,7 @@ private:
         enum Type { FollowPlayhead, Play, Stop, Pause, Rewind, FastForward, Record } type;
         bool hovered = false;
         bool pressed = false;
+        std::wstring tooltip;
     };
 
     void layoutButtons();
@@ -54,6 +58,8 @@ private:
     void initializeGeometries();
     void releaseGeometries();
     std::wstring formatTime(double seconds);
+    std::wstring getTooltipForButton(Button::Type type) const;
+    void updateTooltip();
 
     std::vector<Button> m_buttons;
     bool m_buttonsInitialized = false;
@@ -89,4 +95,12 @@ private:
     Callback m_onRecord;
 
     bool m_hasAudioLoaded = false;  // Tracks if audio is loaded in the project
+
+    // Tooltip state
+    TooltipWindow m_tooltip;
+    static const UINT_PTR TOOLTIP_TIMER_ID = 1001;
+    int m_tooltipButtonIndex = -1;
+    bool m_showTooltip = false;
+    int m_lastMouseX = 0;
+    int m_lastMouseY = 0;
 };

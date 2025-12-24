@@ -67,11 +67,13 @@ protected:
     virtual void onMouseDown(int x, int y, int button) {}
     virtual void onMouseUp(int x, int y, int button) {}
     virtual void onMouseMove(int x, int y) {}
+    virtual void onMouseLeave() {}
     virtual void onMouseWheel(int x, int y, int delta) {}
     virtual void onDoubleClick(int x, int y, int button) {}
     virtual void onKeyDown(int vkey) {}
     virtual void onKeyUp(int vkey) {}
     virtual void onHScroll(HWND scrollBar, int request, int pos) {}
+    virtual void onTimer(UINT_PTR timerId) {}
     virtual bool onClose() { return false; }  // Return true to hide instead of destroy
 
     bool createDeviceResources();

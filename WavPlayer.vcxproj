@@ -28,6 +28,7 @@
     <ClCompile Include="Settings.cpp" />
     <ClCompile Include="SpectrumWindow.cpp" />
     <ClCompile Include="TimelineView.cpp" />
+    <ClCompile Include="TooltipWindow.cpp" />
     <ClCompile Include="Track.cpp" />
     <ClCompile Include="TransportBar.cpp" />
   </ItemGroup>
@@ -41,6 +42,7 @@
     <ClInclude Include="Settings.h" />
     <ClInclude Include="SpectrumWindow.h" />
     <ClInclude Include="TimelineView.h" />
+    <ClInclude Include="TooltipWindow.h" />
     <ClInclude Include="Track.h" />
     <ClInclude Include="TransportBar.h" />
   </ItemGroup>
