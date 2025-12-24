@@ -593,17 +593,32 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
     float tooltipWidth = textWidth + padding * 2;
     float tooltipHeight = textHeight + padding * 2;
 
+    swprintf_s(debug, L"[TOOLTIP] Text metrics: width=%.1f, height=%.1f\n", textWidth, textHeight);
+    OutputDebugString(debug);
+
     // Position tooltip below the button
     float tooltipX = x - tooltipWidth / 2;
     float tooltipY = y + 6.0f;
+
+    swprintf_s(debug, L"[TOOLTIP] Initial position: (%.1f, %.1f), size: %.1fx%.1f\n",
+               tooltipX, tooltipY, tooltipWidth, tooltipHeight);
+    OutputDebugString(debug);
 
     // Ensure tooltip stays within window bounds
     if (tooltipX < 5) tooltipX = 5;
     if (tooltipX + tooltipWidth > getWidth() - 5) tooltipX = getWidth() - tooltipWidth - 5;
 
-    // Draw tooltip background
-    fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(0.2f, 0.2f, 0.22f, 0.95f));
-    drawRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, DAWColors::GridLineMajor, 1.0f);
+    swprintf_s(debug, L"[TOOLTIP] Final position after bounds check: (%.1f, %.1f), window width=%d\n",
+               tooltipX, tooltipY, getWidth());
+    OutputDebugString(debug);
+    swprintf_s(debug, L"[TOOLTIP] Tooltip rect: (%.1f, %.1f) to (%.1f, %.1f)\n",
+               tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight);
+    OutputDebugString(debug);
+
+    // Draw tooltip background - using BRIGHT YELLOW for debugging!
+    OutputDebugString(L"[TOOLTIP] Drawing background with BRIGHT YELLOW for visibility test\n");
+    fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(1.0f, 1.0f, 0.0f, 1.0f));  // Bright yellow
+    drawRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(1.0f, 0.0f, 0.0f, 1.0f), 3.0f);  // Thick red border
 
     // Draw tooltip text
     D2D1_RECT_F textRect = D2D1::RectF(
@@ -613,10 +628,11 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
         tooltipY + tooltipHeight - padding
     );
 
-    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    // Use BLACK text on yellow background for maximum visibility
+    getBrush()->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f));
     rt->DrawText(text.c_str(), text.length(), tooltipFormat, textRect, getBrush());
 
-    OutputDebugString(L"[TOOLTIP] Tooltip drawn successfully!\n");
+    OutputDebugString(L"[TOOLTIP] Tooltip drawn successfully with bright yellow background!\n");
 
     tooltipFormat->Release();
 }
