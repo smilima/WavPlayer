@@ -205,16 +205,9 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
 
     // Draw tooltip if hovering long enough
     if (m_showTooltip && m_tooltipButtonIndex >= 0 && m_tooltipButtonIndex < static_cast<int>(m_buttons.size())) {
-        OutputDebugString(L"[TOOLTIP] Drawing tooltip in onRender\n");
         const auto& btn = m_buttons[m_tooltipButtonIndex];
         float tooltipX = btn.x + btn.w / 2.0f;
         float tooltipY = btn.y;  // Pass button's top edge, will draw above in drawTooltip()
-
-        wchar_t debug[256];
-        swprintf_s(debug, L"[TOOLTIP] Tooltip text: '%s' at position (%.1f, %.1f)\n",
-                   btn.tooltip.c_str(), tooltipX, tooltipY);
-        OutputDebugString(debug);
-
         drawTooltip(rt, btn.tooltip, tooltipX, tooltipY);
     }
 }
@@ -447,26 +440,13 @@ void TransportBar::onMouseMove(int x, int y) {
     // Track tooltip timing using Windows timer
     if (currentHoveredIndex != m_tooltipButtonIndex) {
         // Hovering over a different button (or no button)
-        // Kill any existing tooltip timer
         KillTimer(getHWND(), TOOLTIP_TIMER_ID);
         m_showTooltip = false;
-
         m_tooltipButtonIndex = currentHoveredIndex;
 
         if (currentHoveredIndex >= 0) {
             // Start a new timer for 500ms
-            wchar_t debug[256];
-            swprintf_s(debug, L"[TOOLTIP] Mouse entered button %d, starting timer\n", currentHoveredIndex);
-            OutputDebugString(debug);
-
-            UINT_PTR result = SetTimer(getHWND(), TOOLTIP_TIMER_ID, 500, nullptr);
-            if (result == 0) {
-                OutputDebugString(L"[TOOLTIP] ERROR: SetTimer failed!\n");
-            } else {
-                OutputDebugString(L"[TOOLTIP] Timer set successfully\n");
-            }
-        } else {
-            OutputDebugString(L"[TOOLTIP] Mouse left all buttons, timer killed\n");
+            SetTimer(getHWND(), TOOLTIP_TIMER_ID, 500, nullptr);
         }
 
         needsRedraw = true;
@@ -478,21 +458,11 @@ void TransportBar::onMouseMove(int x, int y) {
 }
 
 void TransportBar::onTimer(UINT_PTR timerId) {
-    wchar_t debug[256];
-    swprintf_s(debug, L"[TOOLTIP] onTimer called with timerId=%d (TOOLTIP_TIMER_ID=%d)\n",
-               static_cast<int>(timerId), static_cast<int>(TOOLTIP_TIMER_ID));
-    OutputDebugString(debug);
-
     if (timerId == TOOLTIP_TIMER_ID) {
         // Tooltip delay has elapsed, show the tooltip
-        OutputDebugString(L"[TOOLTIP] Timer fired! Setting m_showTooltip=true\n");
         m_showTooltip = true;
         KillTimer(getHWND(), TOOLTIP_TIMER_ID);
         invalidate();
-
-        swprintf_s(debug, L"[TOOLTIP] m_tooltipButtonIndex=%d, m_showTooltip=%d\n",
-                   m_tooltipButtonIndex, m_showTooltip ? 1 : 0);
-        OutputDebugString(debug);
     }
 }
 
@@ -530,39 +500,24 @@ std::wstring TransportBar::getTooltipForButton(Button::Type type) const {
 }
 
 void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, float x, float y) {
-    OutputDebugString(L"[TOOLTIP] drawTooltip() called\n");
-
-    if (text.empty()) {
-        OutputDebugString(L"[TOOLTIP] ERROR: text is empty!\n");
-        return;
-    }
-
-    wchar_t debug[256];
-    swprintf_s(debug, L"[TOOLTIP] Drawing tooltip: '%s'\n", text.c_str());
-    OutputDebugString(debug);
+    if (text.empty()) return;
 
     auto writeFactory = Application::getInstance().getDWriteFactory();
     IDWriteTextFormat* tooltipFormat = nullptr;
 
     // Create text format for tooltip
-    HRESULT hr = writeFactory->CreateTextFormat(
+    writeFactory->CreateTextFormat(
         L"Segoe UI",
         nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
         DWRITE_FONT_STYLE_NORMAL,
         DWRITE_FONT_STRETCH_NORMAL,
-        12.0f,
+        11.0f,  // Standard Windows tooltip font size
         L"en-us",
         &tooltipFormat
     );
 
-    if (!tooltipFormat) {
-        swprintf_s(debug, L"[TOOLTIP] ERROR: CreateTextFormat failed! HRESULT=0x%08X\n", hr);
-        OutputDebugString(debug);
-        return;
-    }
-
-    OutputDebugString(L"[TOOLTIP] Text format created successfully\n");
+    if (!tooltipFormat) return;
 
     tooltipFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     tooltipFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -589,39 +544,26 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
     }
 
     // Tooltip dimensions with padding
-    float padding = 8.0f;
+    float padding = 6.0f;  // Smaller padding for Windows tooltip style
     float tooltipWidth = textWidth + padding * 2;
     float tooltipHeight = textHeight + padding * 2;
 
-    swprintf_s(debug, L"[TOOLTIP] Text metrics: width=%.1f, height=%.1f\n", textWidth, textHeight);
-    OutputDebugString(debug);
-
-    // Position tooltip ABOVE the button (was below, but transport bar is only 50px tall!)
+    // Position tooltip ABOVE the button (transport bar is only 50px tall)
     float tooltipX = x - tooltipWidth / 2;
-    float tooltipY = y - tooltipHeight - 6.0f;  // Draw above instead of below
-
-    swprintf_s(debug, L"[TOOLTIP] Initial position: (%.1f, %.1f), size: %.1fx%.1f\n",
-               tooltipX, tooltipY, tooltipWidth, tooltipHeight);
-    OutputDebugString(debug);
+    float tooltipY = y - tooltipHeight - 4.0f;
 
     // Ensure tooltip stays within window bounds
-    if (tooltipX < 5) tooltipX = 5;
-    if (tooltipX + tooltipWidth > getWidth() - 5) tooltipX = getWidth() - tooltipWidth - 5;
-    if (tooltipY < 5) tooltipY = 5;  // Don't go above the top of the window
+    if (tooltipX < 2) tooltipX = 2;
+    if (tooltipX + tooltipWidth > getWidth() - 2) tooltipX = getWidth() - tooltipWidth - 2;
+    if (tooltipY < 2) tooltipY = 2;
 
-    swprintf_s(debug, L"[TOOLTIP] Final position after bounds check: (%.1f, %.1f), window width=%d\n",
-               tooltipX, tooltipY, getWidth());
-    OutputDebugString(debug);
-    swprintf_s(debug, L"[TOOLTIP] Tooltip rect: (%.1f, %.1f) to (%.1f, %.1f)\n",
-               tooltipX, tooltipY, tooltipX + tooltipWidth, tooltipY + tooltipHeight);
-    OutputDebugString(debug);
+    // Draw tooltip background - Windows tooltip style (light yellow #FFFFE1)
+    fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(1.0f, 1.0f, 0.88f, 1.0f));
 
-    // Draw tooltip background - using BRIGHT YELLOW for debugging!
-    OutputDebugString(L"[TOOLTIP] Drawing background with BRIGHT YELLOW for visibility test\n");
-    fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(1.0f, 1.0f, 0.0f, 1.0f));  // Bright yellow
-    drawRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(1.0f, 0.0f, 0.0f, 1.0f), 3.0f);  // Thick red border
+    // Draw border (black, 1px)
+    drawRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(0.0f, 0.0f, 0.0f, 1.0f), 1.0f);
 
-    // Draw tooltip text
+    // Draw tooltip text (black)
     D2D1_RECT_F textRect = D2D1::RectF(
         tooltipX + padding,
         tooltipY + padding,
@@ -629,11 +571,8 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
         tooltipY + tooltipHeight - padding
     );
 
-    // Use BLACK text on yellow background for maximum visibility
     getBrush()->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f));
     rt->DrawText(text.c_str(), text.length(), tooltipFormat, textRect, getBrush());
-
-    OutputDebugString(L"[TOOLTIP] Tooltip drawn successfully with bright yellow background!\n");
 
     tooltipFormat->Release();
 }
