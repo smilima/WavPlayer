@@ -143,7 +143,7 @@ private:
     double m_bpm = 120.0;
     bool m_snapToGrid = true;
     bool m_showGrid = true;
-    bool m_followPlayhead = false;  // Auto-scroll to follow playhead
+    bool m_followPlayhead = true;  // Auto-scroll to follow playhead
 
     // Interaction state
     bool m_draggingPlayhead = false;

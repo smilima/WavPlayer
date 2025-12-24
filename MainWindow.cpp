@@ -48,6 +48,7 @@ enum MenuID {
     ID_VIEW_ZOOM_IN,
     ID_VIEW_ZOOM_OUT,
     ID_VIEW_ZOOM_FIT,
+    ID_VIEW_FOLLOW_PLAYHEAD,
     ID_VIEW_SPECTRUM,
     ID_HELP_ABOUT
 };
@@ -80,6 +81,7 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     configureTransportCallbacks();
     configureAudioCallbacks();
     syncProjectToUI();
+    updateFollowPlayheadMenu();
 
     ShowWindow(m_hwnd, SW_SHOW);
     UpdateWindow(m_hwnd);
@@ -480,6 +482,8 @@ void MainWindow::setupMenus() const {
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_OUT, L"Zoom &Out\tCtrl+-");
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_ZOOM_FIT, L"Zoom to &Fit\tCtrl+0");
     AppendMenu(viewMenu, MF_SEPARATOR, 0, nullptr);
+    AppendMenu(viewMenu, MF_STRING, ID_VIEW_FOLLOW_PLAYHEAD, L"&Follow Playhead\tF");
+    AppendMenu(viewMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_SPECTRUM, L"Show &Spectrum");
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(viewMenu), L"&View");
 
@@ -834,6 +838,31 @@ void MainWindow::toggleRecording() {
     }
 }
 
+void MainWindow::toggleFollowPlayhead() {
+    if (!m_timelineView) {
+        return;
+    }
+
+    bool currentState = m_timelineView->getFollowPlayhead();
+    m_timelineView->setFollowPlayhead(!currentState);
+    updateFollowPlayheadMenu();
+}
+
+void MainWindow::updateFollowPlayheadMenu() {
+    if (!m_hwnd || !m_timelineView) {
+        return;
+    }
+
+    HMENU menuBar = GetMenu(m_hwnd);
+    if (!menuBar) {
+        return;
+    }
+
+    bool isFollowing = m_timelineView->getFollowPlayhead();
+    CheckMenuItem(menuBar, ID_VIEW_FOLLOW_PLAYHEAD,
+        MF_BYCOMMAND | (isFollowing ? MF_CHECKED : MF_UNCHECKED));
+}
+
 void MainWindow::onRecordingComplete(std::shared_ptr<AudioClip> clip) {
     if (!clip || clip->getSampleCount() == 0) {
         return;
@@ -1033,6 +1062,9 @@ void MainWindow::onCommand(int id) {
     case ID_VIEW_ZOOM_OUT:
         m_timelineView->setPixelsPerSecond(m_timelineView->getPixelsPerSecond() / 1.5);
         break;
+    case ID_VIEW_FOLLOW_PLAYHEAD:
+        toggleFollowPlayhead();
+        break;
     case ID_VIEW_SPECTRUM:
         if (m_spectrumWindow) {
             ShowWindow(m_spectrumWindow->getHWND(), SW_SHOW);
@@ -1152,6 +1184,9 @@ LRESULT CALLBACK MainWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 break;
             case 'R':
                 window->toggleRecording();
+                return 0;
+            case 'F':
+                window->toggleFollowPlayhead();
                 return 0;
             default:
                 break;

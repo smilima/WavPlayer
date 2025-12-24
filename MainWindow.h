@@ -78,6 +78,8 @@ private:
     bool shouldDeleteTrackAudio(const std::shared_ptr<Track>& track,
         std::vector<std::wstring>& filesToDelete) const;
     void deleteAudioFiles(const std::vector<std::wstring>& filesToDelete);
+    void toggleFollowPlayhead();
+    void updateFollowPlayheadMenu();
 
 	void showAboutDialog() const;
     
