@@ -242,7 +242,7 @@ void TransportBar::drawFollowPlayheadIcon(ID2D1RenderTarget* rt, float cx, float
     getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
 
     // Draw text using Direct2D text rendering
-    auto writeFactory = Application::getInstance().getWriteFactory();
+    auto writeFactory = Application::getInstance().getDWriteFactory();
     IDWriteTextFormat* textFormat = nullptr;
 
     // Create text format for the "F" icon
