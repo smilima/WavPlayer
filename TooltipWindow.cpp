@@ -31,9 +31,9 @@ bool TooltipWindow::create(HWND parent) {
         s_classRegistered = true;
     }
 
-    // Create popup window with topmost flag
+    // Create popup window with topmost flag and transparent to mouse events
     m_hwnd = CreateWindowEx(
-        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
         L"CustomTooltipWindow",
         L"",
         WS_POPUP,
