@@ -56,12 +56,12 @@ void TooltipWindow::show(const std::wstring& text, int screenX, int screenY, boo
     // Position tooltip centered horizontally on the point
     int x = screenX - m_width / 2;
 
-    // Position vertically: above mouse cursor by default with 10px padding
+    // Position vertically: above mouse cursor by default with 20px padding
     int y;
     if (positionAbove) {
-        y = screenY - m_height - 10;
+        y = screenY - m_height - 20;
     } else {
-        y = screenY + 10;
+        y = screenY + 20;
     }
 
     // Keep tooltip on screen
@@ -73,11 +73,11 @@ void TooltipWindow::show(const std::wstring& text, int screenX, int screenY, boo
 
     // If positioning above would go off top of screen, position below instead
     if (y < workArea.top) {
-        y = screenY + 10;
+        y = screenY + 20;
     }
     // If positioning below would go off bottom of screen, position above instead
     if (y + m_height > workArea.bottom) {
-        y = screenY - m_height - 10;
+        y = screenY - m_height - 20;
     }
 
     SetWindowPos(m_hwnd, HWND_TOPMOST, x, y, m_width, m_height,
