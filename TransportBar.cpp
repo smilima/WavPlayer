@@ -110,32 +110,36 @@ void TransportBar::releaseGeometries() {
 
 void TransportBar::layoutButtons() {
     m_buttons.clear();
-    
+
     float btnSize = 36.0f;
     float spacing = 8.0f;
     float startX = 20.0f;
     float centerY = static_cast<float>(getHeight()) / 2.0f - btnSize / 2.0f;
-    
+
+    // Follow Playhead
+    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FollowPlayhead});
+    startX += btnSize + spacing;
+
     // Rewind
     m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Rewind});
     startX += btnSize + spacing;
-    
+
     // Stop
     m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Stop});
     startX += btnSize + spacing;
-    
+
     // Play/Pause - only show Pause if playing AND audio is loaded
     Button::Type playType = (m_isPlaying && m_hasAudioLoaded) ? Button::Pause : Button::Play;
     m_buttons.push_back({startX, centerY, btnSize, btnSize, playType});
     startX += btnSize + spacing;
-    
+
     // Fast Forward
     m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FastForward});
     startX += btnSize + spacing;
-    
+
     // Record
     m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Record});
-    
+
     m_buttonsInitialized = true;
 }
 
@@ -194,18 +198,24 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
 }
 
 void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
-    Color bgColor = btn.pressed ? DAWColors::ButtonPressed :
+    // Follow Playhead button is highlighted when active
+    bool isActive = (btn.type == Button::FollowPlayhead && m_isFollowingPlayhead);
+    Color bgColor = isActive ? DAWColors::ButtonPressed :
+                    btn.pressed ? DAWColors::ButtonPressed :
                     btn.hovered ? DAWColors::ButtonHover : DAWColors::ButtonNormal;
-    
+
     // Button background with rounded corners
     fillRect(btn.x, btn.y, btn.w, btn.h, bgColor);
     drawRect(btn.x, btn.y, btn.w, btn.h, DAWColors::GridLine, 1.0f);
-    
+
     float cx = btn.x + btn.w / 2.0f;
     float cy = btn.y + btn.h / 2.0f;
     float iconSize = 12.0f;
-    
+
     switch (btn.type) {
+        case Button::FollowPlayhead:
+            drawFollowPlayheadIcon(rt, cx, cy, iconSize);
+            break;
         case Button::Play:
             drawPlayIcon(rt, cx, cy, iconSize);
             break;
@@ -224,6 +234,41 @@ void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
         case Button::Record:
             drawRecordIcon(rt, cx, cy, iconSize);
             break;
+    }
+}
+
+void TransportBar::drawFollowPlayheadIcon(ID2D1RenderTarget* rt, float cx, float cy, float size) {
+    // Draw a simple "F" character
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+
+    // Draw text using Direct2D text rendering
+    auto writeFactory = Application::getInstance().getWriteFactory();
+    IDWriteTextFormat* textFormat = nullptr;
+
+    // Create text format for the "F" icon
+    writeFactory->CreateTextFormat(
+        L"Segoe UI",
+        nullptr,
+        DWRITE_FONT_WEIGHT_BOLD,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        size * 1.5f,  // Font size scaled with icon size
+        L"en-us",
+        &textFormat
+    );
+
+    if (textFormat) {
+        textFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        textFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+        // Draw "F" centered at the button position
+        D2D1_RECT_F textRect = D2D1::RectF(
+            cx - size, cy - size,
+            cx + size, cy + size
+        );
+
+        rt->DrawText(L"F", 1, textFormat, textRect, getBrush());
+        textFormat->Release();
     }
 }
 
@@ -327,6 +372,9 @@ void TransportBar::onMouseUp(int x, int y, int button) {
             if (x >= btn.x && x <= btn.x + btn.w &&
                 y >= btn.y && y <= btn.y + btn.h) {
                    switch (btn.type) {
+                       case Button::FollowPlayhead:
+                           if (m_onFollowPlayhead) m_onFollowPlayhead();
+                           break;
                        case Button::Play:
                            // Only play if audio is loaded
                            if (m_hasAudioLoaded && m_onPlay) m_onPlay();

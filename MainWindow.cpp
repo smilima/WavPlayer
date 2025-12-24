@@ -83,6 +83,9 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     syncProjectToUI();
     updateFollowPlayheadMenu();
 
+    // Initialize transport bar follow playhead state
+    m_transportBar->setFollowingPlayhead(m_timelineView->getFollowPlayhead());
+
     ShowWindow(m_hwnd, SW_SHOW);
     UpdateWindow(m_hwnd);
 
@@ -172,6 +175,7 @@ void MainWindow::configureTimelineCallbacks() {
 }
 
 void MainWindow::configureTransportCallbacks() {
+    m_transportBar->setFollowPlayheadCallback([this]() { toggleFollowPlayhead(); });
     m_transportBar->setPlayCallback([this]() { play(); });
     m_transportBar->setPauseCallback([this]() { pause(); });
     m_transportBar->setStopCallback([this]() { stop(); });
@@ -844,7 +848,9 @@ void MainWindow::toggleFollowPlayhead() {
     }
 
     bool currentState = m_timelineView->getFollowPlayhead();
-    m_timelineView->setFollowPlayhead(!currentState);
+    bool newState = !currentState;
+    m_timelineView->setFollowPlayhead(newState);
+    m_transportBar->setFollowingPlayhead(newState);
     updateFollowPlayheadMenu();
 }
 
