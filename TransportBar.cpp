@@ -166,7 +166,8 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
     }
 
     // Time display - use cached strings when values haven't changed
-    float timeX = 250.0f;
+    // Positioned after all transport buttons (6 buttons * 36px + 6 gaps * 8px + left margin 20px + right gap 18px = 294px)
+    float timeX = 294.0f;
     float timeY = static_cast<float>(getHeight()) / 2.0f - 10.0f;
 
     // Cache position string
