@@ -513,10 +513,14 @@ void TransportBar::updateTooltip() {
 
     const auto& btn = m_buttons[m_tooltipButtonIndex];
 
-    // Convert mouse position to screen coordinates
+    // Convert DIP coordinates to physical pixels, then to screen coordinates
+    // Mouse coordinates are in DIPs due to DPI scaling in D2DWindow
+    int physicalX = static_cast<int>(dipsToPixelsX(static_cast<float>(m_lastMouseX)));
+    int physicalY = static_cast<int>(dipsToPixelsY(static_cast<float>(m_lastMouseY)));
+
     POINT pt;
-    pt.x = static_cast<LONG>(m_lastMouseX);
-    pt.y = static_cast<LONG>(m_lastMouseY);
+    pt.x = physicalX;
+    pt.y = physicalY;
     ClientToScreen(getHWND(), &pt);
 
     // Show tooltip popup above the mouse cursor
