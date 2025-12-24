@@ -317,6 +317,10 @@ LRESULT CALLBACK D2DWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         window->onKeyUp(static_cast<int>(wParam));
         return 0;
 
+    case WM_TIMER:
+        window->onTimer(static_cast<UINT_PTR>(wParam));
+        return 0;
+
     case WM_CLOSE:
         // Allow subclass to handle close (e.g., hide instead of destroy)
         if (window->onClose()) {

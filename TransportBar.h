@@ -32,6 +32,7 @@ protected:
     void onMouseDown(int x, int y, int button) override;
     void onMouseUp(int x, int y, int button) override;
     void onMouseMove(int x, int y) override;
+    void onTimer(UINT_PTR timerId) override;
 
 private:
     struct Button {
@@ -94,7 +95,7 @@ private:
     bool m_hasAudioLoaded = false;  // Tracks if audio is loaded in the project
 
     // Tooltip state
+    static const UINT_PTR TOOLTIP_TIMER_ID = 1001;
     int m_tooltipButtonIndex = -1;
-    DWORD m_tooltipHoverStartTime = 0;
-    static const DWORD TOOLTIP_DELAY_MS = 500;
+    bool m_showTooltip = false;
 };

@@ -204,14 +204,11 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
     drawText(m_cachedBpmStr, bpmX, timeY, DAWColors::TextSecondary, 100, 20);
 
     // Draw tooltip if hovering long enough
-    if (m_tooltipButtonIndex >= 0 && m_tooltipButtonIndex < static_cast<int>(m_buttons.size())) {
-        DWORD elapsed = GetTickCount() - m_tooltipHoverStartTime;
-        if (elapsed >= TOOLTIP_DELAY_MS) {
-            const auto& btn = m_buttons[m_tooltipButtonIndex];
-            float tooltipX = btn.x + btn.w / 2.0f;
-            float tooltipY = btn.y + btn.h;
-            drawTooltip(rt, btn.tooltip, tooltipX, tooltipY);
-        }
+    if (m_showTooltip && m_tooltipButtonIndex >= 0 && m_tooltipButtonIndex < static_cast<int>(m_buttons.size())) {
+        const auto& btn = m_buttons[m_tooltipButtonIndex];
+        float tooltipX = btn.x + btn.w / 2.0f;
+        float tooltipY = btn.y + btn.h;
+        drawTooltip(rt, btn.tooltip, tooltipX, tooltipY);
     }
 }
 
@@ -440,21 +437,33 @@ void TransportBar::onMouseMove(int x, int y) {
         }
     }
 
-    // Track tooltip timing
+    // Track tooltip timing using Windows timer
     if (currentHoveredIndex != m_tooltipButtonIndex) {
         // Hovering over a different button (or no button)
+        // Kill any existing tooltip timer
+        KillTimer(getHWND(), TOOLTIP_TIMER_ID);
+        m_showTooltip = false;
+
         m_tooltipButtonIndex = currentHoveredIndex;
-        m_tooltipHoverStartTime = (currentHoveredIndex >= 0) ? GetTickCount() : 0;
-        needsRedraw = true;
-    } else if (currentHoveredIndex >= 0) {
-        // Still hovering over same button - check if tooltip should appear
-        DWORD elapsed = GetTickCount() - m_tooltipHoverStartTime;
-        if (elapsed >= TOOLTIP_DELAY_MS) {
-            needsRedraw = true;
+
+        if (currentHoveredIndex >= 0) {
+            // Start a new timer for 500ms
+            SetTimer(getHWND(), TOOLTIP_TIMER_ID, 500, nullptr);
         }
+
+        needsRedraw = true;
     }
 
     if (needsRedraw) {
+        invalidate();
+    }
+}
+
+void TransportBar::onTimer(UINT_PTR timerId) {
+    if (timerId == TOOLTIP_TIMER_ID) {
+        // Tooltip delay has elapsed, show the tooltip
+        m_showTooltip = true;
+        KillTimer(getHWND(), TOOLTIP_TIMER_ID);
         invalidate();
     }
 }
