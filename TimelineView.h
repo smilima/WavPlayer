@@ -55,6 +55,8 @@ public:
     void setBPM(double bpm) { if (m_bpm != bpm) { m_bpm = bpm; invalidate(); } }
     void setSnapToGrid(bool snap) { m_snapToGrid = snap; }
     void setShowGrid(bool show) { if (m_showGrid != show) { m_showGrid = show; invalidate(); } }
+    bool getShowGrid() const { return m_showGrid; }
+    bool getSnapToGrid() const { return m_snapToGrid; }
 
     // Selection
     int getSelectedTrackIndex() const { return m_selectedTrack; }

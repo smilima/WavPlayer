@@ -60,12 +60,29 @@ MainWindow::~MainWindow() {
 }
 
 bool MainWindow::create(const wchar_t* title, int width, int height) {
+    // Load settings first to get saved window position/size
+    m_settings.load();
+
     if (!registerWindowClass()) {
         return false;
     }
 
-    if (!createNativeWindow(title, width, height)) {
+    // Use saved window size if available, otherwise use provided defaults
+    int windowWidth = m_settings.getWindowWidth();
+    int windowHeight = m_settings.getWindowHeight();
+    if (windowWidth <= 0) windowWidth = width;
+    if (windowHeight <= 0) windowHeight = height;
+
+    if (!createNativeWindow(title, windowWidth, windowHeight)) {
         return false;
+    }
+
+    // Apply saved window position
+    int x = m_settings.getWindowX();
+    int y = m_settings.getWindowY();
+    if (x > 0 && y > 0) {
+        SetWindowPos(m_hwnd, nullptr, x, y, windowWidth, windowHeight,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
     }
 
     setupMenus();
@@ -81,12 +98,13 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     configureTransportCallbacks();
     configureAudioCallbacks();
     syncProjectToUI();
-    updateFollowPlayheadMenu();
 
-    // Initialize transport bar follow playhead state
-    m_transportBar->setFollowingPlayhead(m_timelineView->getFollowPlayhead());
+    // Load and apply settings to views
+    loadSettings();
 
-    ShowWindow(m_hwnd, SW_SHOW);
+    // Show window (maximized if it was maximized last time)
+    int showCmd = m_settings.getWindowMaximized() ? SW_SHOWMAXIMIZED : SW_SHOW;
+    ShowWindow(m_hwnd, showCmd);
     UpdateWindow(m_hwnd);
 
     startPlaybackTimer();
@@ -1111,7 +1129,71 @@ void MainWindow::onDropFiles(HDROP hDrop) {
 
 void MainWindow::onClose() {
     if (promptSaveIfModified()) {
+        saveSettings();
         DestroyWindow(m_hwnd);
+    }
+}
+
+void MainWindow::loadSettings() {
+    m_settings.load();
+
+    // Apply timeline settings
+    if (m_timelineView) {
+        m_timelineView->setPixelsPerSecond(m_settings.getPixelsPerSecond());
+        m_timelineView->setFollowPlayhead(m_settings.getFollowPlayhead());
+        m_timelineView->setShowGrid(m_settings.getShowGrid());
+        m_timelineView->setSnapToGrid(m_settings.getSnapToGrid());
+    }
+
+    // Apply transport bar settings
+    if (m_transportBar) {
+        m_transportBar->setBPM(m_settings.getBPM());
+        m_transportBar->setFollowingPlayhead(m_settings.getFollowPlayhead());
+    }
+
+    // Update menu checkmark for follow playhead
+    updateFollowPlayheadMenu();
+}
+
+void MainWindow::saveSettings() {
+    // Save window position and size
+    saveWindowPosition();
+
+    // Save timeline settings
+    if (m_timelineView) {
+        m_settings.setPixelsPerSecond(m_timelineView->getPixelsPerSecond());
+        m_settings.setFollowPlayhead(m_timelineView->getFollowPlayhead());
+        m_settings.setShowGrid(m_timelineView->getShowGrid());
+        m_settings.setSnapToGrid(m_timelineView->getSnapToGrid());
+    }
+
+    // Save transport bar settings
+    if (m_transportBar) {
+        m_settings.setBPM(120.0);  // BPM is currently hardcoded, update when it becomes dynamic
+    }
+
+    // Save last project path if a project is loaded
+    if (m_project && m_project->hasFilename()) {
+        m_settings.setLastProjectPath(m_project->getFilename());
+    }
+
+    m_settings.save();
+}
+
+void MainWindow::saveWindowPosition() {
+    if (!m_hwnd) return;
+
+    WINDOWPLACEMENT wp = { sizeof(WINDOWPLACEMENT) };
+    if (GetWindowPlacement(m_hwnd, &wp)) {
+        // Save whether window is maximized
+        m_settings.setWindowMaximized(wp.showCmd == SW_SHOWMAXIMIZED);
+
+        // Save normal (non-maximized) position and size
+        RECT& rc = wp.rcNormalPosition;
+        m_settings.setWindowX(rc.left);
+        m_settings.setWindowY(rc.top);
+        m_settings.setWindowWidth(rc.right - rc.left);
+        m_settings.setWindowHeight(rc.bottom - rc.top);
     }
 }
 

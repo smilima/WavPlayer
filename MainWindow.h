@@ -5,6 +5,7 @@
 #include "AudioEngine.h"
 #include "Project.h"
 #include "SpectrumWindow.h"
+#include "Settings.h"
 #include <memory>
 #include <filesystem>
 #include <string>
@@ -80,11 +81,15 @@ private:
     void deleteAudioFiles(const std::vector<std::wstring>& filesToDelete);
     void toggleFollowPlayhead();
     void updateFollowPlayheadMenu();
+    void loadSettings();
+    void saveSettings();
+    void saveWindowPosition();
 
 	void showAboutDialog() const;
-    
+
     HWND m_hwnd = nullptr;
     UINT_PTR m_timerId = 0;
+    Settings m_settings;
     
     std::unique_ptr<TransportBar> m_transportBar;
     std::unique_ptr<TimelineView> m_timelineView;
