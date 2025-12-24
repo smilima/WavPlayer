@@ -25,6 +25,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MainWindow.cpp" />
     <ClCompile Include="Project.cpp" />
+    <ClCompile Include="Settings.cpp" />
     <ClCompile Include="SpectrumWindow.cpp" />
     <ClCompile Include="TimelineView.cpp" />
     <ClCompile Include="Track.cpp" />
@@ -37,6 +38,7 @@
     <ClInclude Include="MainWindow.h" />
     <ClInclude Include="Project.h" />
     <ClInclude Include="resource.h" />
+    <ClInclude Include="Settings.h" />
     <ClInclude Include="SpectrumWindow.h" />
     <ClInclude Include="TimelineView.h" />
     <ClInclude Include="Track.h" />
