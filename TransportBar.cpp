@@ -1,5 +1,6 @@
 #include "TransportBar.h"
 #include "Application.h"
+#include "TooltipWindow.h"
 #include <sstream>
 #include <iomanip>
 
@@ -155,6 +156,13 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
         initializeGeometries();
     }
 
+    // Initialize tooltip window on first render
+    static bool tooltipInitialized = false;
+    if (!tooltipInitialized && getHWND()) {
+        m_tooltip.create(getHWND());
+        tooltipInitialized = true;
+    }
+
     // Background
     fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()),
              DAWColors::Transport);
@@ -202,14 +210,6 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
     }
     float bpmX = static_cast<float>(getWidth()) - 150.0f;
     drawText(m_cachedBpmStr, bpmX, timeY, DAWColors::TextSecondary, 100, 20);
-
-    // Draw tooltip if hovering long enough
-    if (m_showTooltip && m_tooltipButtonIndex >= 0 && m_tooltipButtonIndex < static_cast<int>(m_buttons.size())) {
-        const auto& btn = m_buttons[m_tooltipButtonIndex];
-        float tooltipX = btn.x + btn.w / 2.0f;
-        float tooltipY = btn.y;  // Pass button's top edge, will draw above in drawTooltip()
-        drawTooltip(rt, btn.tooltip, tooltipX, tooltipY);
-    }
 }
 
 void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
@@ -442,6 +442,7 @@ void TransportBar::onMouseMove(int x, int y) {
         // Hovering over a different button (or no button)
         KillTimer(getHWND(), TOOLTIP_TIMER_ID);
         m_showTooltip = false;
+        m_tooltip.hide();  // Hide popup tooltip
         m_tooltipButtonIndex = currentHoveredIndex;
 
         if (currentHoveredIndex >= 0) {
@@ -462,7 +463,7 @@ void TransportBar::onTimer(UINT_PTR timerId) {
         // Tooltip delay has elapsed, show the tooltip
         m_showTooltip = true;
         KillTimer(getHWND(), TOOLTIP_TIMER_ID);
-        invalidate();
+        updateTooltip();
     }
 }
 
@@ -499,80 +500,21 @@ std::wstring TransportBar::getTooltipForButton(Button::Type type) const {
     }
 }
 
-void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, float x, float y) {
-    if (text.empty()) return;
-
-    auto writeFactory = Application::getInstance().getDWriteFactory();
-    IDWriteTextFormat* tooltipFormat = nullptr;
-
-    // Create text format for tooltip
-    writeFactory->CreateTextFormat(
-        L"Segoe UI",
-        nullptr,
-        DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL,
-        11.0f,  // Standard Windows tooltip font size
-        L"en-us",
-        &tooltipFormat
-    );
-
-    if (!tooltipFormat) return;
-
-    tooltipFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-    tooltipFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-
-    // Measure text
-    IDWriteTextLayout* textLayout = nullptr;
-    writeFactory->CreateTextLayout(
-        text.c_str(),
-        text.length(),
-        tooltipFormat,
-        1000.0f,
-        100.0f,
-        &textLayout
-    );
-
-    float textWidth = 0;
-    float textHeight = 0;
-    if (textLayout) {
-        DWRITE_TEXT_METRICS metrics;
-        textLayout->GetMetrics(&metrics);
-        textWidth = metrics.width;
-        textHeight = metrics.height;
-        textLayout->Release();
+void TransportBar::updateTooltip() {
+    if (!m_showTooltip || m_tooltipButtonIndex < 0 ||
+        m_tooltipButtonIndex >= static_cast<int>(m_buttons.size())) {
+        m_tooltip.hide();
+        return;
     }
 
-    // Tooltip dimensions with padding
-    float padding = 6.0f;  // Smaller padding for Windows tooltip style
-    float tooltipWidth = textWidth + padding * 2;
-    float tooltipHeight = textHeight + padding * 2;
+    const auto& btn = m_buttons[m_tooltipButtonIndex];
 
-    // Position tooltip ABOVE the button (transport bar is only 50px tall)
-    float tooltipX = x - tooltipWidth / 2;
-    float tooltipY = y - tooltipHeight - 4.0f;
+    // Convert button position to screen coordinates
+    POINT pt;
+    pt.x = static_cast<LONG>(btn.x + btn.w / 2.0f);
+    pt.y = static_cast<LONG>(btn.y);
+    ClientToScreen(getHWND(), &pt);
 
-    // Ensure tooltip stays within window bounds
-    if (tooltipX < 2) tooltipX = 2;
-    if (tooltipX + tooltipWidth > getWidth() - 2) tooltipX = getWidth() - tooltipWidth - 2;
-    if (tooltipY < 2) tooltipY = 2;
-
-    // Draw tooltip background - Windows tooltip style (light yellow #FFFFE1)
-    fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(1.0f, 1.0f, 0.88f, 1.0f));
-
-    // Draw border (black, 1px)
-    drawRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(0.0f, 0.0f, 0.0f, 1.0f), 1.0f);
-
-    // Draw tooltip text (black)
-    D2D1_RECT_F textRect = D2D1::RectF(
-        tooltipX + padding,
-        tooltipY + padding,
-        tooltipX + tooltipWidth - padding,
-        tooltipY + tooltipHeight - padding
-    );
-
-    getBrush()->SetColor(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f));
-    rt->DrawText(text.c_str(), text.length(), tooltipFormat, textRect, getBrush());
-
-    tooltipFormat->Release();
+    // Show tooltip popup at screen coordinates
+    m_tooltip.show(btn.tooltip, pt.x, pt.y);
 }
