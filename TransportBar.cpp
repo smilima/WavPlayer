@@ -208,7 +208,7 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
         OutputDebugString(L"[TOOLTIP] Drawing tooltip in onRender\n");
         const auto& btn = m_buttons[m_tooltipButtonIndex];
         float tooltipX = btn.x + btn.w / 2.0f;
-        float tooltipY = btn.y + btn.h;
+        float tooltipY = btn.y;  // Pass button's top edge, will draw above in drawTooltip()
 
         wchar_t debug[256];
         swprintf_s(debug, L"[TOOLTIP] Tooltip text: '%s' at position (%.1f, %.1f)\n",
@@ -596,9 +596,9 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
     swprintf_s(debug, L"[TOOLTIP] Text metrics: width=%.1f, height=%.1f\n", textWidth, textHeight);
     OutputDebugString(debug);
 
-    // Position tooltip below the button
+    // Position tooltip ABOVE the button (was below, but transport bar is only 50px tall!)
     float tooltipX = x - tooltipWidth / 2;
-    float tooltipY = y + 6.0f;
+    float tooltipY = y - tooltipHeight - 6.0f;  // Draw above instead of below
 
     swprintf_s(debug, L"[TOOLTIP] Initial position: (%.1f, %.1f), size: %.1fx%.1f\n",
                tooltipX, tooltipY, tooltipWidth, tooltipHeight);
@@ -607,6 +607,7 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
     // Ensure tooltip stays within window bounds
     if (tooltipX < 5) tooltipX = 5;
     if (tooltipX + tooltipWidth > getWidth() - 5) tooltipX = getWidth() - tooltipWidth - 5;
+    if (tooltipY < 5) tooltipY = 5;  // Don't go above the top of the window
 
     swprintf_s(debug, L"[TOOLTIP] Final position after bounds check: (%.1f, %.1f), window width=%d\n",
                tooltipX, tooltipY, getWidth());
