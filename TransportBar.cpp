@@ -117,28 +117,34 @@ void TransportBar::layoutButtons() {
     float centerY = static_cast<float>(getHeight()) / 2.0f - btnSize / 2.0f;
 
     // Follow Playhead
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FollowPlayhead});
+    Button followBtn = {startX, centerY, btnSize, btnSize, Button::FollowPlayhead, false, false, getTooltipForButton(Button::FollowPlayhead)};
+    m_buttons.push_back(followBtn);
     startX += btnSize + spacing;
 
     // Rewind
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Rewind});
+    Button rewindBtn = {startX, centerY, btnSize, btnSize, Button::Rewind, false, false, getTooltipForButton(Button::Rewind)};
+    m_buttons.push_back(rewindBtn);
     startX += btnSize + spacing;
 
     // Stop
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Stop});
+    Button stopBtn = {startX, centerY, btnSize, btnSize, Button::Stop, false, false, getTooltipForButton(Button::Stop)};
+    m_buttons.push_back(stopBtn);
     startX += btnSize + spacing;
 
     // Play/Pause - only show Pause if playing AND audio is loaded
     Button::Type playType = (m_isPlaying && m_hasAudioLoaded) ? Button::Pause : Button::Play;
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, playType});
+    Button playBtn = {startX, centerY, btnSize, btnSize, playType, false, false, getTooltipForButton(playType)};
+    m_buttons.push_back(playBtn);
     startX += btnSize + spacing;
 
     // Fast Forward
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::FastForward});
+    Button ffBtn = {startX, centerY, btnSize, btnSize, Button::FastForward, false, false, getTooltipForButton(Button::FastForward)};
+    m_buttons.push_back(ffBtn);
     startX += btnSize + spacing;
 
     // Record
-    m_buttons.push_back({startX, centerY, btnSize, btnSize, Button::Record});
+    Button recBtn = {startX, centerY, btnSize, btnSize, Button::Record, false, false, getTooltipForButton(Button::Record)};
+    m_buttons.push_back(recBtn);
 
     m_buttonsInitialized = true;
 }
@@ -196,6 +202,17 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
     }
     float bpmX = static_cast<float>(getWidth()) - 150.0f;
     drawText(m_cachedBpmStr, bpmX, timeY, DAWColors::TextSecondary, 100, 20);
+
+    // Draw tooltip if hovering long enough
+    if (m_tooltipButtonIndex >= 0 && m_tooltipButtonIndex < static_cast<int>(m_buttons.size())) {
+        DWORD elapsed = GetTickCount() - m_tooltipHoverStartTime;
+        if (elapsed >= TOOLTIP_DELAY_MS) {
+            const auto& btn = m_buttons[m_tooltipButtonIndex];
+            float tooltipX = btn.x + btn.w / 2.0f;
+            float tooltipY = btn.y + btn.h;
+            drawTooltip(rt, btn.tooltip, tooltipX, tooltipY);
+        }
+    }
 }
 
 void TransportBar::drawButton(ID2D1RenderTarget* rt, const Button& btn) {
@@ -406,16 +423,37 @@ void TransportBar::onMouseUp(int x, int y, int button) {
 
 void TransportBar::onMouseMove(int x, int y) {
     bool needsRedraw = false;
-    
-    for (auto& btn : m_buttons) {
+    int currentHoveredIndex = -1;
+
+    for (size_t i = 0; i < m_buttons.size(); ++i) {
+        auto& btn = m_buttons[i];
         bool wasHovered = btn.hovered;
         btn.hovered = (x >= btn.x && x <= btn.x + btn.w &&
                        y >= btn.y && y <= btn.y + btn.h);
+
+        if (btn.hovered) {
+            currentHoveredIndex = static_cast<int>(i);
+        }
+
         if (wasHovered != btn.hovered) {
             needsRedraw = true;
         }
     }
-    
+
+    // Track tooltip timing
+    if (currentHoveredIndex != m_tooltipButtonIndex) {
+        // Hovering over a different button (or no button)
+        m_tooltipButtonIndex = currentHoveredIndex;
+        m_tooltipHoverStartTime = (currentHoveredIndex >= 0) ? GetTickCount() : 0;
+        needsRedraw = true;
+    } else if (currentHoveredIndex >= 0) {
+        // Still hovering over same button - check if tooltip should appear
+        DWORD elapsed = GetTickCount() - m_tooltipHoverStartTime;
+        if (elapsed >= TOOLTIP_DELAY_MS) {
+            needsRedraw = true;
+        }
+    }
+
     if (needsRedraw) {
         invalidate();
     }
@@ -425,10 +463,106 @@ std::wstring TransportBar::formatTime(double seconds) {
     int mins = static_cast<int>(seconds) / 60;
     int secs = static_cast<int>(seconds) % 60;
     int ms = static_cast<int>((seconds - static_cast<int>(seconds)) * 1000);
-    
+
     std::wostringstream ss;
     ss << std::setfill(L'0') << std::setw(2) << mins << L":"
        << std::setw(2) << secs << L"."
        << std::setw(3) << ms;
     return ss.str();
+}
+
+std::wstring TransportBar::getTooltipForButton(Button::Type type) const {
+    switch (type) {
+        case Button::FollowPlayhead:
+            return L"Follow Playhead";
+        case Button::Play:
+            return L"Play";
+        case Button::Pause:
+            return L"Pause";
+        case Button::Stop:
+            return L"Stop";
+        case Button::Rewind:
+            return L"Rewind";
+        case Button::FastForward:
+            return L"Fast Forward";
+        case Button::Record:
+            return L"Record";
+        default:
+            return L"";
+    }
+}
+
+void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, float x, float y) {
+    if (text.empty()) return;
+
+    auto writeFactory = Application::getInstance().getDWriteFactory();
+    IDWriteTextFormat* tooltipFormat = nullptr;
+
+    // Create text format for tooltip
+    writeFactory->CreateTextFormat(
+        L"Segoe UI",
+        nullptr,
+        DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL,
+        DWRITE_FONT_STRETCH_NORMAL,
+        12.0f,
+        L"en-us",
+        &tooltipFormat
+    );
+
+    if (!tooltipFormat) return;
+
+    tooltipFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+    tooltipFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+
+    // Measure text
+    IDWriteTextLayout* textLayout = nullptr;
+    writeFactory->CreateTextLayout(
+        text.c_str(),
+        text.length(),
+        tooltipFormat,
+        1000.0f,
+        100.0f,
+        &textLayout
+    );
+
+    float textWidth = 0;
+    float textHeight = 0;
+    if (textLayout) {
+        DWRITE_TEXT_METRICS metrics;
+        textLayout->GetMetrics(&metrics);
+        textWidth = metrics.width;
+        textHeight = metrics.height;
+        textLayout->Release();
+    }
+
+    // Tooltip dimensions with padding
+    float padding = 8.0f;
+    float tooltipWidth = textWidth + padding * 2;
+    float tooltipHeight = textHeight + padding * 2;
+
+    // Position tooltip below the button
+    float tooltipX = x - tooltipWidth / 2;
+    float tooltipY = y + 6.0f;
+
+    // Ensure tooltip stays within window bounds
+    if (tooltipX < 5) tooltipX = 5;
+    if (tooltipX + tooltipWidth > getWidth() - 5) tooltipX = getWidth() - tooltipWidth - 5;
+
+    // Draw tooltip background
+    fillRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, Color(0.2f, 0.2f, 0.22f, 0.95f));
+    drawRect(tooltipX, tooltipY, tooltipWidth, tooltipHeight, DAWColors::GridLineMajor, 1.0f);
+
+    // Draw tooltip text
+    D2D1_RECT_F textRect = D2D1::RectF(
+        tooltipX + padding,
+        tooltipY + padding,
+        tooltipX + tooltipWidth - padding,
+        tooltipY + tooltipHeight - padding
+    );
+
+    getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
+    rt->DrawText(text.c_str(), text.length(), tooltipFormat, textRect, getBrush());
+
+    tooltipFormat->Release();
 }

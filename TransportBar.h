@@ -39,6 +39,7 @@ private:
         enum Type { FollowPlayhead, Play, Stop, Pause, Rewind, FastForward, Record } type;
         bool hovered = false;
         bool pressed = false;
+        std::wstring tooltip;
     };
 
     void layoutButtons();
@@ -54,6 +55,8 @@ private:
     void initializeGeometries();
     void releaseGeometries();
     std::wstring formatTime(double seconds);
+    void drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, float x, float y);
+    std::wstring getTooltipForButton(Button::Type type) const;
 
     std::vector<Button> m_buttons;
     bool m_buttonsInitialized = false;
@@ -89,4 +92,9 @@ private:
     Callback m_onRecord;
 
     bool m_hasAudioLoaded = false;  // Tracks if audio is loaded in the project
+
+    // Tooltip state
+    int m_tooltipButtonIndex = -1;
+    DWORD m_tooltipHoverStartTime = 0;
+    static const DWORD TOOLTIP_DELAY_MS = 500;
 };
