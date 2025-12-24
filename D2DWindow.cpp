@@ -288,10 +288,21 @@ LRESULT CALLBACK D2DWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
     case WM_MOUSEMOVE:
         {
+            // Track mouse leave events
+            TRACKMOUSEEVENT tme = {};
+            tme.cbSize = sizeof(tme);
+            tme.dwFlags = TME_LEAVE;
+            tme.hwndTrack = hwnd;
+            TrackMouseEvent(&tme);
+
             int dipX = static_cast<int>(window->pixelsToDipsX(GET_X_LPARAM(lParam)));
             int dipY = static_cast<int>(window->pixelsToDipsY(GET_Y_LPARAM(lParam)));
             window->onMouseMove(dipX, dipY);
         }
+        return 0;
+
+    case WM_MOUSELEAVE:
+        window->onMouseLeave();
         return 0;
 
     case WM_MOUSEWHEEL:

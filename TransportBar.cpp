@@ -462,6 +462,27 @@ void TransportBar::onMouseMove(int x, int y) {
     }
 }
 
+void TransportBar::onMouseLeave() {
+    // Mouse left the window, hide tooltip and clear all hover states
+    KillTimer(getHWND(), TOOLTIP_TIMER_ID);
+    m_showTooltip = false;
+    m_tooltip.hide();
+    m_tooltipButtonIndex = -1;
+
+    // Clear all button hover states
+    bool needsRedraw = false;
+    for (auto& btn : m_buttons) {
+        if (btn.hovered) {
+            btn.hovered = false;
+            needsRedraw = true;
+        }
+    }
+
+    if (needsRedraw) {
+        invalidate();
+    }
+}
+
 void TransportBar::onTimer(UINT_PTR timerId) {
     if (timerId == TOOLTIP_TIMER_ID) {
         // Tooltip delay has elapsed, show the tooltip

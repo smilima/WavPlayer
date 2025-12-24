@@ -33,6 +33,7 @@ protected:
     void onMouseDown(int x, int y, int button) override;
     void onMouseUp(int x, int y, int button) override;
     void onMouseMove(int x, int y) override;
+    void onMouseLeave() override;
     void onTimer(UINT_PTR timerId) override;
 
 private:
