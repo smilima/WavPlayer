@@ -205,9 +205,16 @@ void TransportBar::onRender(ID2D1RenderTarget* rt) {
 
     // Draw tooltip if hovering long enough
     if (m_showTooltip && m_tooltipButtonIndex >= 0 && m_tooltipButtonIndex < static_cast<int>(m_buttons.size())) {
+        OutputDebugString(L"[TOOLTIP] Drawing tooltip in onRender\n");
         const auto& btn = m_buttons[m_tooltipButtonIndex];
         float tooltipX = btn.x + btn.w / 2.0f;
         float tooltipY = btn.y + btn.h;
+
+        wchar_t debug[256];
+        swprintf_s(debug, L"[TOOLTIP] Tooltip text: '%s' at position (%.1f, %.1f)\n",
+                   btn.tooltip.c_str(), tooltipX, tooltipY);
+        OutputDebugString(debug);
+
         drawTooltip(rt, btn.tooltip, tooltipX, tooltipY);
     }
 }
@@ -448,7 +455,18 @@ void TransportBar::onMouseMove(int x, int y) {
 
         if (currentHoveredIndex >= 0) {
             // Start a new timer for 500ms
-            SetTimer(getHWND(), TOOLTIP_TIMER_ID, 500, nullptr);
+            wchar_t debug[256];
+            swprintf_s(debug, L"[TOOLTIP] Mouse entered button %d, starting timer\n", currentHoveredIndex);
+            OutputDebugString(debug);
+
+            UINT_PTR result = SetTimer(getHWND(), TOOLTIP_TIMER_ID, 500, nullptr);
+            if (result == 0) {
+                OutputDebugString(L"[TOOLTIP] ERROR: SetTimer failed!\n");
+            } else {
+                OutputDebugString(L"[TOOLTIP] Timer set successfully\n");
+            }
+        } else {
+            OutputDebugString(L"[TOOLTIP] Mouse left all buttons, timer killed\n");
         }
 
         needsRedraw = true;
@@ -460,11 +478,21 @@ void TransportBar::onMouseMove(int x, int y) {
 }
 
 void TransportBar::onTimer(UINT_PTR timerId) {
+    wchar_t debug[256];
+    swprintf_s(debug, L"[TOOLTIP] onTimer called with timerId=%d (TOOLTIP_TIMER_ID=%d)\n",
+               static_cast<int>(timerId), static_cast<int>(TOOLTIP_TIMER_ID));
+    OutputDebugString(debug);
+
     if (timerId == TOOLTIP_TIMER_ID) {
         // Tooltip delay has elapsed, show the tooltip
+        OutputDebugString(L"[TOOLTIP] Timer fired! Setting m_showTooltip=true\n");
         m_showTooltip = true;
         KillTimer(getHWND(), TOOLTIP_TIMER_ID);
         invalidate();
+
+        swprintf_s(debug, L"[TOOLTIP] m_tooltipButtonIndex=%d, m_showTooltip=%d\n",
+                   m_tooltipButtonIndex, m_showTooltip ? 1 : 0);
+        OutputDebugString(debug);
     }
 }
 
@@ -502,13 +530,22 @@ std::wstring TransportBar::getTooltipForButton(Button::Type type) const {
 }
 
 void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, float x, float y) {
-    if (text.empty()) return;
+    OutputDebugString(L"[TOOLTIP] drawTooltip() called\n");
+
+    if (text.empty()) {
+        OutputDebugString(L"[TOOLTIP] ERROR: text is empty!\n");
+        return;
+    }
+
+    wchar_t debug[256];
+    swprintf_s(debug, L"[TOOLTIP] Drawing tooltip: '%s'\n", text.c_str());
+    OutputDebugString(debug);
 
     auto writeFactory = Application::getInstance().getDWriteFactory();
     IDWriteTextFormat* tooltipFormat = nullptr;
 
     // Create text format for tooltip
-    writeFactory->CreateTextFormat(
+    HRESULT hr = writeFactory->CreateTextFormat(
         L"Segoe UI",
         nullptr,
         DWRITE_FONT_WEIGHT_NORMAL,
@@ -519,7 +556,13 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
         &tooltipFormat
     );
 
-    if (!tooltipFormat) return;
+    if (!tooltipFormat) {
+        swprintf_s(debug, L"[TOOLTIP] ERROR: CreateTextFormat failed! HRESULT=0x%08X\n", hr);
+        OutputDebugString(debug);
+        return;
+    }
+
+    OutputDebugString(L"[TOOLTIP] Text format created successfully\n");
 
     tooltipFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
     tooltipFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
@@ -572,6 +615,8 @@ void TransportBar::drawTooltip(ID2D1RenderTarget* rt, const std::wstring& text, 
 
     getBrush()->SetColor(DAWColors::TextPrimary.toD2D());
     rt->DrawText(text.c_str(), text.length(), tooltipFormat, textRect, getBrush());
+
+    OutputDebugString(L"[TOOLTIP] Tooltip drawn successfully!\n");
 
     tooltipFormat->Release();
 }
