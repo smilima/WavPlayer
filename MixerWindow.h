@@ -21,6 +21,14 @@ public:
     using MasterPeakGetter = std::function<float()>;
     void setMasterPeakGetter(MasterPeakGetter getter) { m_masterPeakGetter = getter; }
 
+    // dB conversion helpers (public for testing and reuse)
+    static float linearToDB(float linear);
+    static float dbToLinear(float db);
+
+    // dB scale range constants (public for testing)
+    static constexpr float MIN_DB = -60.0f;
+    static constexpr float MAX_DB = 6.0f;
+
 protected:
     void onRender(ID2D1RenderTarget* rt) override;
     void onResize(int width, int height) override;
@@ -60,10 +68,6 @@ private:
     Control* getControlAtPosition(int x, int y);
     float getValueFromSliderY(int y, float sliderY, float sliderHeight);
     float getValueFromKnobAngle(int mouseX, int mouseY, float knobCenterX, float knobCenterY);
-
-    // dB conversion helpers
-    static float linearToDB(float linear);
-    static float dbToLinear(float db);
     static float getDBFromSliderY(int y, float sliderY, float sliderHeight);
 
     // Constants
@@ -76,10 +80,6 @@ private:
     static constexpr float SLIDER_WIDTH = 30.0f;
     static constexpr float VU_METER_WIDTH = 22.0f;  // Wider to prevent text wrapping
     static constexpr float BUTTON_HEIGHT = 30.0f;
-
-    // dB scale range for volume slider
-    static constexpr float MIN_DB = -60.0f;
-    static constexpr float MAX_DB = 6.0f;
 
     // Data
     std::vector<std::shared_ptr<Track>>* m_tracks = nullptr;
