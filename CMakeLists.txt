@@ -58,3 +58,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Group source files in IDE
 source_group("Source Files" FILES ${SOURCES})
 source_group("Header Files" FILES ${HEADERS})
+
+# Find your test file list, likely looks like:
+set(TEST_SOURCES
+    tests/trackregion_test.cpp
+    tests/track_test.cpp        # Remove or comment out
+    tests/project_test.cpp      # Remove or comment out
+)
