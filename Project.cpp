@@ -6,10 +6,6 @@
 #include <filesystem>
 
 Project::Project() {
-    // Create a default track
-    auto track = std::make_shared<Track>(L"Track 1");
-    track->setColor(0xFF4A90D9);
-    m_tracks.push_back(track);
 }
 
 void Project::clear() {
@@ -147,7 +143,7 @@ std::wstring Project::serializeProject() const {
             
             ss << L"[Region:" << i << L":" << r << L"]\n";
 
-            // Find the clip path from the reverse mapping (O(1) instead of O(n))
+            // Find the clip path from the reverse mapping (O/1 instead of O(n))
             std::wstring clipPath;
             if (region.clip) {
                 auto it = m_clipToPathCache.find(region.clip.get());
