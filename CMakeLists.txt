@@ -7,7 +7,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Windows-specific settings
 if(WIN32)
     add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX)
-    set(CMAKE_WIN32_EXECUTABLE ON)
 endif()
 
 # Source files
