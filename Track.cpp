@@ -41,10 +41,11 @@ void Track::getAudioAtTime(double time, float* leftOut, float* rightOut,
                            uint32_t sampleRate) const {
     *leftOut = 0.0f;
     *rightOut = 0.0f;
-    
-    // Skip muted tracks or armed tracks (to avoid feedback during recording)
-    if (m_muted || m_armed) return;
-    
+
+    // Skip armed tracks (to avoid feedback during recording)
+    // Note: We still process muted tracks for metering, but don't output audio
+    if (m_armed) return;
+
     for (const auto& region : m_regions) {
         // Early exit: regions are sorted, so if we've passed the time, stop searching
         if (time < region.startTime) break;
@@ -63,12 +64,33 @@ void Track::getAudioAtTime(double time, float* leftOut, float* rightOut,
                                   samples[frameIndex * format.channels + 1] : left;
 
                     // Apply cached track volume and pan gains (updated when volume/pan changes)
-                    *leftOut += left * m_cachedLeftGain;
-                    *rightOut += right * m_cachedRightGain;
+                    float processedLeft = left * m_cachedLeftGain;
+                    float processedRight = right * m_cachedRightGain;
+
+                    // Update peak level for metering (always, even when muted)
+                    float peak = std::max(std::abs(processedLeft), std::abs(processedRight));
+                    if (peak > m_peakLevel) {
+                        m_peakLevel = peak;
+                    }
+
+                    // Only output audio if not muted
+                    if (!m_muted) {
+                        *leftOut += processedLeft;
+                        *rightOut += processedRight;
+                    }
                 }
             }
             // Found matching region, no need to check further
             break;
         }
+    }
+}
+
+void Track::updatePeakLevel(float level) {
+    // Update peak with decay (simulates VU meter ballistics)
+    constexpr float DECAY_RATE = 0.95f;
+    m_peakLevel *= DECAY_RATE;
+    if (level > m_peakLevel) {
+        m_peakLevel = level;
     }
 }

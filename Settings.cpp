@@ -34,6 +34,13 @@ void Settings::load() {
     m_windowHeight = readInt(L"Window", L"Height", m_windowHeight);
     m_windowMaximized = readBool(L"Window", L"Maximized", m_windowMaximized);
 
+    // Mixer window settings
+    m_mixerWindowX = readInt(L"MixerWindow", L"X", m_mixerWindowX);
+    m_mixerWindowY = readInt(L"MixerWindow", L"Y", m_mixerWindowY);
+    m_mixerWindowWidth = readInt(L"MixerWindow", L"Width", m_mixerWindowWidth);
+    m_mixerWindowHeight = readInt(L"MixerWindow", L"Height", m_mixerWindowHeight);
+    m_mixerWindowVisible = readBool(L"MixerWindow", L"Visible", m_mixerWindowVisible);
+
     // Timeline settings
     m_pixelsPerSecond = readDouble(L"Timeline", L"PixelsPerSecond", m_pixelsPerSecond);
     m_followPlayhead = readBool(L"Timeline", L"FollowPlayhead", m_followPlayhead);
@@ -52,6 +59,13 @@ void Settings::save() {
     writeInt(L"Window", L"Width", m_windowWidth);
     writeInt(L"Window", L"Height", m_windowHeight);
     writeBool(L"Window", L"Maximized", m_windowMaximized);
+
+    // Mixer window settings
+    writeInt(L"MixerWindow", L"X", m_mixerWindowX);
+    writeInt(L"MixerWindow", L"Y", m_mixerWindowY);
+    writeInt(L"MixerWindow", L"Width", m_mixerWindowWidth);
+    writeInt(L"MixerWindow", L"Height", m_mixerWindowHeight);
+    writeBool(L"MixerWindow", L"Visible", m_mixerWindowVisible);
 
     // Timeline settings
     writeDouble(L"Timeline", L"PixelsPerSecond", m_pixelsPerSecond);

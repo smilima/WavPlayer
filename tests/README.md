@@ -1,107 +1,235 @@
-# WavPlayer Unit Tests
+# WavPlayer Automated Tests
 
-This directory contains unit tests for the WavPlayer project using Google Test framework.
+This directory contains automated unit tests for the WavPlayer project using Google Test framework.
 
-## Test Structure
+## Setup Instructions for Visual Studio 2022
 
-- `track_test.cpp` - Tests for the Track class
-- `project_test.cpp` - Tests for the Project class
-- `trackregion_test.cpp` - Tests for the TrackRegion struct
+### Step 1: Add Test Project to Solution
 
-## Building and Running Tests
+1. Open your WavPlayer solution in Visual Studio 2022
+2. Right-click on the solution in Solution Explorer
+3. Select **Add → Existing Project**
+4. Navigate to the `tests` folder and select `WavPlayerTests.vcxproj`
 
-### Prerequisites
+### Step 2: Install Google Test via NuGet
 
-- CMake 3.20 or higher
-- C++17 compatible compiler
-- Windows SDK (for Windows-specific dependencies)
+The project is configured to use NuGet for Google Test. When you first build:
 
-### Building Tests
+1. Right-click on the `WavPlayerTests` project
+2. Select **Manage NuGet Packages**
+3. If prompted, restore packages (or they may restore automatically)
+4. The Google Test package `Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn` will be installed
 
-```bash
-# Create build directory
-mkdir build
-cd build
+**Alternative Manual Installation:**
+1. Right-click on `WavPlayerTests` project
+2. **Manage NuGet Packages**
+3. Click **Browse** tab
+4. Search for "google test"
+5. Install `Microsoft.googletest.v140.windesktop.msvcstl.static.rt-dyn`
 
-# Configure CMake
-cmake ..
+### Step 3: Build the Test Project
 
-# Build the project and tests
-cmake --build .
+1. Set the build configuration (Debug or Release)
+2. Right-click on `WavPlayerTests` project
+3. Select **Build**
 
-# Or build only tests
-cmake --build . --target WavPlayerTests
+The tests will be compiled to `bin\Debug\tests\WavPlayerTests.exe` or `bin\Release\tests\WavPlayerTests.exe`
+
+### Step 4: Run Tests
+
+#### Option A: Using Test Explorer (Recommended)
+
+1. Open **Test Explorer** (Test → Test Explorer or Ctrl+E, T)
+2. Click **Run All** to run all tests
+3. Tests will appear in the explorer with pass/fail status
+4. Click individual tests to see details
+5. Right-click tests to run, debug, or view source
+
+#### Option B: Using Command Line
+
+```cmd
+cd bin\Debug\tests
+WavPlayerTests.exe
 ```
 
-### Running Tests
-
-```bash
-# Run all tests
-ctest
-
-# Or run the test executable directly
-./WavPlayerTests
-
-# Run with verbose output
-./WavPlayerTests --gtest_verbose
-
-# Run specific test suite
-./WavPlayerTests --gtest_filter=TrackTest.*
-
-# Run specific test
-./WavPlayerTests --gtest_filter=TrackTest.Volume
+Or for specific tests:
+```cmd
+WavPlayerTests.exe --gtest_filter=TrackTests.*
 ```
 
-## Test Coverage
+#### Option C: Using Visual Studio Debugger
 
-Current tests cover:
+1. Right-click on `WavPlayerTests` project
+2. **Set as Startup Project**
+3. Press F5 to run with debugging
+4. Tests will run in console and show results
 
-### Track Class
-- Constructor and default values
-- Property getters and setters (name, volume, pan, mute, solo, armed, height, color)
-- Visibility logic (explicit and with regions)
-- Region management (add/remove)
-- Height constraints (minimum 60px)
+## Test Organization
 
-### TrackRegion Struct
-- Default construction
-- End time calculation
-- Property values
-- Clip offset handling
+### Current Test Files
 
-### Project Class
-- Constructor and default values
-- Filename management
-- Modified flag behavior
-- BPM and sample rate settings
-- Track management (add/remove/clear)
-- Project name extraction
-- Audio loaded detection
-- File extension constants
+- **TrackTests.cpp** - Tests for Track class functionality
+  - Track creation and properties
+  - Volume, pan, and EQ controls
+  - Mute/solo functionality
+  - Peak level tracking
+  - Color and visibility properties
 
-## Adding New Tests
+- **SettingsTests.cpp** - Tests for Settings class
+  - Window position and size persistence
+  - Mixer window settings
+  - Timeline settings
+  - Project path storage
 
-To add new tests:
+- **AudioUtilsTests.cpp** - Tests for audio utility functions
+  - dB to linear conversion
+  - Linear to dB conversion
+  - Round-trip conversion accuracy
+  - Range limiting and clamping
 
-1. Create a new test file in the `tests/` directory (e.g., `myclass_test.cpp`)
-2. Include the necessary headers and use Google Test macros
-3. Add the test file to `TEST_SOURCES` in the root `CMakeLists.txt`
-4. Add any additional source files needed for the tests
+## Writing New Tests
 
-Example test structure:
+### Test File Template
 
 ```cpp
-#include <gtest/gtest.h>
-#include "../MyClass.h"
+#include "gtest/gtest.h"
+#include "../YourClass.h"
 
-TEST(MyClassTest, TestName) {
-    MyClass obj;
-    EXPECT_EQ(obj.getValue(), 42);
+// Simple test
+TEST(TestSuiteName, TestName) {
+    // Arrange
+    YourClass obj;
+
+    // Act
+    int result = obj.someMethod();
+
+    // Assert
+    EXPECT_EQ(result, expectedValue);
+}
+
+// Test with fixture (for setup/teardown)
+class MyTestFixture : public ::testing::Test {
+protected:
+    void SetUp() override {
+        // Runs before each test
+    }
+
+    void TearDown() override {
+        // Runs after each test
+    }
+};
+
+TEST_F(MyTestFixture, TestWithFixture) {
+    // Your test code
 }
 ```
 
-## Google Test Framework
+### Common Assertions
 
-The project uses Google Test v1.15.2, which is automatically downloaded via CMake's FetchContent.
+```cpp
+EXPECT_EQ(a, b);        // a == b
+EXPECT_NE(a, b);        // a != b
+EXPECT_LT(a, b);        // a < b
+EXPECT_GT(a, b);        // a > b
+EXPECT_LE(a, b);        // a <= b
+EXPECT_GE(a, b);        // a >= b
 
-For more information on writing tests, see the [Google Test documentation](https://google.github.io/googletest/).
+EXPECT_FLOAT_EQ(a, b);  // Floating point equality
+EXPECT_NEAR(a, b, epsilon);  // Within epsilon
+
+EXPECT_TRUE(condition);
+EXPECT_FALSE(condition);
+
+EXPECT_STREQ(s1, s2);   // C-string equality
+```
+
+## Running Specific Tests
+
+### Filter by test name
+```cmd
+WavPlayerTests.exe --gtest_filter=TrackTests.VolumeControl
+```
+
+### Filter by test suite
+```cmd
+WavPlayerTests.exe --gtest_filter=TrackTests.*
+```
+
+### Run tests matching pattern
+```cmd
+WavPlayerTests.exe --gtest_filter=*Volume*
+```
+
+### Exclude tests
+```cmd
+WavPlayerTests.exe --gtest_filter=-SettingsTests.*
+```
+
+## Continuous Integration
+
+To integrate with CI/CD:
+
+1. Build test project: `msbuild tests\WavPlayerTests.vcxproj /p:Configuration=Release`
+2. Run tests: `bin\Release\tests\WavPlayerTests.exe --gtest_output=xml:test_results.xml`
+3. Parse XML output for results
+
+## Troubleshooting
+
+### "Cannot find Google Test headers"
+- Ensure NuGet packages are restored
+- Check that the Google Test NuGet package is installed
+- Verify `packages.config` is present
+
+### "LNK2001 unresolved external symbol"
+- Ensure all required source files are included in the test project
+- Check that Windows libraries (d2d1.lib, dwrite.lib, winmm.lib) are linked
+- Verify main.cpp is NOT included (it has WinMain which conflicts)
+
+### Tests don't appear in Test Explorer
+- Clean and rebuild the solution
+- Close and reopen Visual Studio
+- Check **Test → Test Explorer** is showing "All Tests"
+- Verify test project built successfully
+
+### Build errors about missing files
+- Ensure all source files from main project are accessible
+- Check relative paths in .vcxproj are correct
+- Verify you're building x64 configuration (x86 not configured)
+
+## Adding More Tests
+
+To add new test files:
+
+1. Create new `.cpp` file in `tests/` directory
+2. Add `#include "gtest/gtest.h"` and your class headers
+3. Write TEST() or TEST_F() macros
+4. Add the file to `WavPlayerTests.vcxproj` in the `<ItemGroup>` with test files
+5. Rebuild and run
+
+## Best Practices
+
+1. **Test Naming**: Use descriptive names - `TEST(AudioEngine, ProcessesMonoClipCorrectly)`
+2. **Arrange-Act-Assert**: Structure tests clearly
+3. **One Assertion Per Test**: Keep tests focused (guideline, not rule)
+4. **Fast Tests**: Unit tests should run in milliseconds
+5. **Isolated Tests**: Each test should be independent
+6. **Mock External Dependencies**: For UI/IO, consider mocking
+
+## Future Test Coverage
+
+Areas to expand test coverage:
+
+- [ ] AudioEngine playback logic
+- [ ] AudioClip loading and processing
+- [ ] Project save/load functionality
+- [ ] Timeline view calculations
+- [ ] Audio region manipulation
+- [ ] Real-time audio mixing
+- [ ] EQ filter processing
+- [ ] Transport controls
+
+## Resources
+
+- [Google Test Documentation](https://google.github.io/googletest/)
+- [Google Test Primer](https://google.github.io/googletest/primer.html)
+- [Advanced Google Test Topics](https://google.github.io/googletest/advanced.html)

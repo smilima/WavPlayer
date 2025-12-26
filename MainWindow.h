@@ -5,6 +5,7 @@
 #include "AudioEngine.h"
 #include "Project.h"
 #include "SpectrumWindow.h"
+#include "MixerWindow.h"
 #include "Settings.h"
 #include <memory>
 #include <filesystem>
@@ -84,6 +85,7 @@ private:
     void loadSettings();
     void saveSettings();
     void saveWindowPosition();
+    void saveMixerWindowPosition();
 
 	void showAboutDialog() const;
 
@@ -96,6 +98,7 @@ private:
     std::unique_ptr<AudioEngine> m_audioEngine;
     std::unique_ptr<Project> m_project;
     std::unique_ptr<SpectrumWindow> m_spectrumWindow;
+    std::unique_ptr<MixerWindow> m_mixerWindow;
 
     int m_nextTrackNumber = 2;
     int m_recordingCount = 0;
