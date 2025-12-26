@@ -26,6 +26,17 @@ public:
     void setWindowHeight(int height) { m_windowHeight = height; }
     void setWindowMaximized(bool maximized) { m_windowMaximized = maximized; }
 
+    // Mixer window settings
+    int getMixerWindowX() const { return m_mixerWindowX; }
+    int getMixerWindowY() const { return m_mixerWindowY; }
+    int getMixerWindowWidth() const { return m_mixerWindowWidth; }
+    int getMixerWindowHeight() const { return m_mixerWindowHeight; }
+
+    void setMixerWindowX(int x) { m_mixerWindowX = x; }
+    void setMixerWindowY(int y) { m_mixerWindowY = y; }
+    void setMixerWindowWidth(int width) { m_mixerWindowWidth = width; }
+    void setMixerWindowHeight(int height) { m_mixerWindowHeight = height; }
+
     // Timeline settings
     double getPixelsPerSecond() const { return m_pixelsPerSecond; }
     bool getFollowPlayhead() const { return m_followPlayhead; }
@@ -63,6 +74,12 @@ private:
     int m_windowWidth = 1280;
     int m_windowHeight = 720;
     bool m_windowMaximized = false;
+
+    // Mixer window settings
+    int m_mixerWindowX = 100;
+    int m_mixerWindowY = 100;
+    int m_mixerWindowWidth = 800;
+    int m_mixerWindowHeight = 600;
 
     // Timeline settings
     double m_pixelsPerSecond = 100.0;

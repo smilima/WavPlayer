@@ -85,6 +85,7 @@ private:
     void loadSettings();
     void saveSettings();
     void saveWindowPosition();
+    void saveMixerWindowPosition();
 
 	void showAboutDialog() const;
 

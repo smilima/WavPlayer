@@ -172,9 +172,14 @@ void MainWindow::createChildViews() {
     m_spectrumWindow->create(nullptr, 100, 100, 600, 400, L"SpectrumWindow");
     SetWindowText(m_spectrumWindow->getHWND(), L"Spectrum Analyzer");
 
-    // Create mixer window (hidden by default)
+    // Create mixer window (hidden by default) with saved position
     m_mixerWindow = std::make_unique<MixerWindow>();
-    m_mixerWindow->create(nullptr, 100, 100, 800, 600, L"MixerWindow");
+    m_mixerWindow->create(nullptr,
+        m_settings.getMixerWindowX(),
+        m_settings.getMixerWindowY(),
+        m_settings.getMixerWindowWidth(),
+        m_settings.getMixerWindowHeight(),
+        L"MixerWindow");
     SetWindowText(m_mixerWindow->getHWND(), L"Track Mixer");
     m_mixerWindow->setTracks(&m_project->getTracks());
     m_mixerWindow->setChangeCallback([this]() {
@@ -1189,6 +1194,7 @@ void MainWindow::loadSettings() {
 void MainWindow::saveSettings() {
     // Save window position and size
     saveWindowPosition();
+    saveMixerWindowPosition();
 
     // Save timeline settings
     if (m_timelineView) {
@@ -1225,6 +1231,21 @@ void MainWindow::saveWindowPosition() {
         m_settings.setWindowY(rc.top);
         m_settings.setWindowWidth(rc.right - rc.left);
         m_settings.setWindowHeight(rc.bottom - rc.top);
+    }
+}
+
+void MainWindow::saveMixerWindowPosition() {
+    if (!m_mixerWindow) return;
+
+    HWND mixerHwnd = m_mixerWindow->getHWND();
+    if (!mixerHwnd) return;
+
+    RECT rc;
+    if (GetWindowRect(mixerHwnd, &rc)) {
+        m_settings.setMixerWindowX(rc.left);
+        m_settings.setMixerWindowY(rc.top);
+        m_settings.setMixerWindowWidth(rc.right - rc.left);
+        m_settings.setMixerWindowHeight(rc.bottom - rc.top);
     }
 }
 
