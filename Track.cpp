@@ -6,7 +6,7 @@ Track::Track(const std::wstring& name) : m_name(name) {
 }
 
 void Track::setVolume(float volume) {
-    m_volume = std::clamp(volume, 0.0f, 1.0f);
+    m_volume = std::max(0.0f, volume);
     updateGains();
 }
 

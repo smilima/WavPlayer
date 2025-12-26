@@ -6,8 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Windows-specific settings
 if(WIN32)
-    add_definitions(-DUNICODE -D_UNICODE)
-    set(CMAKE_WIN32_EXECUTABLE ON)
+    add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX)
 endif()
 
 # Source files
@@ -58,3 +57,10 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 # Group source files in IDE
 source_group("Source Files" FILES ${SOURCES})
 source_group("Header Files" FILES ${HEADERS})
+
+# Find your test file list, likely looks like:
+set(TEST_SOURCES
+    tests/trackregion_test.cpp
+    tests/track_test.cpp        # Remove or comment out
+    tests/project_test.cpp      # Remove or comment out
+)
