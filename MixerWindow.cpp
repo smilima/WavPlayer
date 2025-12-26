@@ -276,6 +276,18 @@ void MixerWindow::drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float wid
     // Draw 0 dB line
     float zeroDBY = y + height * (1.0f - (0.0f - MIN_DB) / (MAX_DB - MIN_DB));
     drawLine(x, zeroDBY, x + width, zeroDBY, DAWColors::TextPrimary, 1.0f);
+
+    // Draw numeric peak level value below meter
+    wchar_t peakLabel[16];
+    if (peakDB <= MIN_DB) {
+        swprintf(peakLabel, 16, L"-inf");
+    } else {
+        swprintf(peakLabel, 16, L"%.1f", peakDB);
+    }
+
+    // Draw the text centered below the meter
+    float textY = y + height + 5;
+    drawText(peakLabel, x - 5, textY, DAWColors::TextSecondary, width + 10);
 }
 
 void MixerWindow::drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float volumeDB, bool hovered) {
