@@ -218,7 +218,7 @@ void MixerWindow::drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, floa
 void MixerWindow::drawRotaryKnob(ID2D1RenderTarget* rt, float x, float y, float radius, float value, bool hovered, const wchar_t* label) {
     // Draw outer circle
     ID2D1EllipseGeometry* ellipse = nullptr;
-    auto factory = Application::instance().getD2DFactory();
+    auto factory = Application::getInstance().getD2DFactory();
     factory->CreateEllipseGeometry(D2D1::Ellipse(D2D1::Point2F(x, y), radius, radius), &ellipse);
 
     if (ellipse) {
@@ -234,8 +234,8 @@ void MixerWindow::drawRotaryKnob(ID2D1RenderTarget* rt, float x, float y, float 
 
     // Draw value indicator (tick mark)
     // Value range: 0 to 1, mapped to angle from 225 degrees to -45 degrees (270 degree sweep)
-    float startAngle = 225.0f * M_PI / 180.0f;  // Bottom-left
-    float endAngle = -45.0f * M_PI / 180.0f;    // Bottom-right
+    float startAngle = 225.0f * static_cast<float>(M_PI) / 180.0f;  // Bottom-left
+    float endAngle = -45.0f * static_cast<float>(M_PI) / 180.0f;    // Bottom-right
     float angle = startAngle + value * (endAngle - startAngle);
 
     float tickLength = radius * 0.6f;
@@ -296,18 +296,18 @@ float MixerWindow::getValueFromKnobAngle(int mouseX, int mouseY, float knobCente
     // Map angle to 0-1 range
     // Start angle: 225 degrees (bottom-left) = 0.0
     // End angle: -45 degrees (bottom-right) = 1.0
-    float startAngle = 225.0f * M_PI / 180.0f;
-    float endAngle = -45.0f * M_PI / 180.0f;
+    float startAngle = 225.0f * static_cast<float>(M_PI) / 180.0f;
+    float endAngle = -45.0f * static_cast<float>(M_PI) / 180.0f;
 
     // Normalize angle to 0-2π range
-    if (angle < 0) angle += 2 * M_PI;
+    if (angle < 0) angle += 2.0f * static_cast<float>(M_PI);
 
     // Convert to value (0-1)
     float totalSweep = startAngle - endAngle;
-    if (totalSweep < 0) totalSweep += 2 * M_PI;
+    if (totalSweep < 0) totalSweep += 2.0f * static_cast<float>(M_PI);
 
     float angleFromStart = startAngle - angle;
-    if (angleFromStart < 0) angleFromStart += 2 * M_PI;
+    if (angleFromStart < 0) angleFromStart += 2.0f * static_cast<float>(M_PI);
 
     float value = angleFromStart / totalSweep;
     return std::max(0.0f, std::min(1.0f, value));
