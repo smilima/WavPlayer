@@ -26,7 +26,17 @@ public:
 
     float getPan() const { return m_pan; }
     void setPan(float pan);
-    
+
+    // EQ controls (-12 to +12 dB)
+    float getEQLow() const { return m_eqLow; }
+    void setEQLow(float gain) { m_eqLow = std::clamp(gain, -12.0f, 12.0f); }
+
+    float getEQMid() const { return m_eqMid; }
+    void setEQMid(float gain) { m_eqMid = std::clamp(gain, -12.0f, 12.0f); }
+
+    float getEQHigh() const { return m_eqHigh; }
+    void setEQHigh(float gain) { m_eqHigh = std::clamp(gain, -12.0f, 12.0f); }
+
     bool isMuted() const { return m_muted; }
     void setMuted(bool muted) { m_muted = muted; }
     
@@ -63,6 +73,9 @@ private:
     std::wstring m_name;
     float m_volume = 1.0f;
     float m_pan = 0.0f;  // -1.0 (left) to 1.0 (right)
+    float m_eqLow = 0.0f;   // -12.0 to +12.0 dB
+    float m_eqMid = 0.0f;   // -12.0 to +12.0 dB
+    float m_eqHigh = 0.0f;  // -12.0 to +12.0 dB
     bool m_muted = false;
     bool m_solo = false;
     bool m_armed = false;

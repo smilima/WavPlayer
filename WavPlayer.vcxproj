@@ -24,6 +24,7 @@
     <ClCompile Include="D2DWindow.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="MainWindow.cpp" />
+    <ClCompile Include="MixerWindow.cpp" />
     <ClCompile Include="Project.cpp" />
     <ClCompile Include="Settings.cpp" />
     <ClCompile Include="SpectrumWindow.cpp" />
@@ -37,6 +38,7 @@
     <ClInclude Include="AudioEngine.h" />
     <ClInclude Include="D2DWindow.h" />
     <ClInclude Include="MainWindow.h" />
+    <ClInclude Include="MixerWindow.h" />
     <ClInclude Include="Project.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="Settings.h" />

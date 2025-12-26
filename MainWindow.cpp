@@ -50,6 +50,7 @@ enum MenuID {
     ID_VIEW_ZOOM_FIT,
     ID_VIEW_FOLLOW_PLAYHEAD,
     ID_VIEW_SPECTRUM,
+    ID_VIEW_MIXER,
     ID_HELP_ABOUT
 };
 
@@ -170,6 +171,17 @@ void MainWindow::createChildViews() {
     m_spectrumWindow = std::make_unique<SpectrumWindow>();
     m_spectrumWindow->create(nullptr, 100, 100, 600, 400, L"SpectrumWindow");
     SetWindowText(m_spectrumWindow->getHWND(), L"Spectrum Analyzer");
+
+    // Create mixer window (hidden by default)
+    m_mixerWindow = std::make_unique<MixerWindow>();
+    m_mixerWindow->create(nullptr, 100, 100, 800, 600, L"MixerWindow");
+    SetWindowText(m_mixerWindow->getHWND(), L"Track Mixer");
+    m_mixerWindow->setTracks(&m_project->getTracks());
+    m_mixerWindow->setChangeCallback([this]() {
+        if (m_timelineView) {
+            m_timelineView->invalidate();
+        }
+    });
 }
 
 void MainWindow::configureTimelineCallbacks() {
@@ -507,6 +519,7 @@ void MainWindow::setupMenus() const {
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_FOLLOW_PLAYHEAD, L"&Follow Playhead\tF");
     AppendMenu(viewMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_SPECTRUM, L"Show &Spectrum");
+    AppendMenu(viewMenu, MF_STRING, ID_VIEW_MIXER, L"Show &Mixer");
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(viewMenu), L"&View");
 
     HMENU helpMenu = CreatePopupMenu();
@@ -544,6 +557,12 @@ void MainWindow::syncProjectToUI() {
 
     m_timelineView->setBPM(m_project->getBPM());
     m_transportBar->setBPM(m_project->getBPM());
+
+    // Update mixer window with current tracks
+    if (m_mixerWindow) {
+        m_mixerWindow->setTracks(&m_project->getTracks());
+        m_mixerWindow->invalidate();
+    }
 
     resetPlaybackToStart();
     refreshProjectDuration();
@@ -1093,6 +1112,13 @@ void MainWindow::onCommand(int id) {
         if (m_spectrumWindow) {
             ShowWindow(m_spectrumWindow->getHWND(), SW_SHOW);
             SetForegroundWindow(m_spectrumWindow->getHWND());
+        }
+        break;
+    case ID_VIEW_MIXER:
+        if (m_mixerWindow) {
+            ShowWindow(m_mixerWindow->getHWND(), SW_SHOW);
+            SetForegroundWindow(m_mixerWindow->getHWND());
+            m_mixerWindow->invalidate();
         }
         break;
     case ID_HELP_ABOUT:
