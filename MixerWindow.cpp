@@ -21,6 +21,26 @@ void MixerWindow::setTracks(std::vector<std::shared_ptr<Track>>* tracks) {
     invalidate();
 }
 
+// dB conversion helpers
+float MixerWindow::linearToDB(float linear) {
+    if (linear <= 0.0f) return MIN_DB;
+    float db = 20.0f * log10f(linear);
+    return std::max(MIN_DB, std::min(MAX_DB, db));
+}
+
+float MixerWindow::dbToLinear(float db) {
+    if (db <= MIN_DB) return 0.0f;
+    return powf(10.0f, db / 20.0f);
+}
+
+float MixerWindow::getDBFromSliderY(int y, float sliderY, float sliderHeight) {
+    float relativeY = y - sliderY;
+    float normalized = 1.0f - (relativeY / sliderHeight);
+    normalized = std::max(0.0f, std::min(1.0f, normalized));
+    // Map 0-1 to MIN_DB to MAX_DB
+    return MIN_DB + normalized * (MAX_DB - MIN_DB);
+}
+
 void MixerWindow::onRender(ID2D1RenderTarget* rt) {
     // Clear background
     fillRect(0, 0, static_cast<float>(getWidth()), static_cast<float>(getHeight()),
@@ -59,10 +79,16 @@ void MixerWindow::drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float 
 
     float currentY = y + 30;
 
-    // Volume slider
-    float sliderX = x + (width - SLIDER_WIDTH) / 2;
+    // VU meter on the left
+    float vuMeterX = x + 5;
+    float vuMeterY = currentY;
+    drawVUMeter(rt, vuMeterX, vuMeterY, VU_METER_WIDTH, SLIDER_HEIGHT, track->getPeakLevel());
+
+    // Volume slider (center-right)
+    float sliderX = x + VU_METER_WIDTH + 10 + (width - VU_METER_WIDTH - 15 - SLIDER_WIDTH) / 2;
     float sliderY = currentY;
-    drawVolumeSlider(rt, sliderX, sliderY, SLIDER_WIDTH, SLIDER_HEIGHT, track->getVolume(), false);
+    float volumeDB = linearToDB(track->getVolume());
+    drawVolumeSlider(rt, sliderX, sliderY, SLIDER_WIDTH, SLIDER_HEIGHT, volumeDB, false);
 
     // Add control for volume slider
     Control volumeControl;
@@ -76,11 +102,14 @@ void MixerWindow::drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float 
 
     currentY += SLIDER_HEIGHT + 20;
 
-    // Volume label
+    // Volume label in dB
     wchar_t volLabel[32];
-    int volPercent = static_cast<int>(track->getVolume() * 100);
-    swprintf(volLabel, 32, L"%d%%", volPercent);
-    drawText(volLabel, x + width / 2 - 15, currentY, DAWColors::TextSecondary);
+    if (volumeDB <= MIN_DB) {
+        swprintf(volLabel, 32, L"-inf");
+    } else {
+        swprintf(volLabel, 32, L"%.1f dB", volumeDB);
+    }
+    drawText(volLabel, x + width / 2 - 20, currentY, DAWColors::TextSecondary);
 
     currentY += 30;
 
@@ -198,18 +227,77 @@ void MixerWindow::drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float 
     m_controls.push_back(soloControl);
 }
 
-void MixerWindow::drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float value, bool hovered) {
+void MixerWindow::drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height, float peakLevel) {
+    // Draw VU meter background
+    fillRect(x, y, width, height, DAWColors::Timeline);
+    drawRect(x, y, width, height, DAWColors::GridLine, 1.0f);
+
+    // Convert peak level to dB
+    float peakDB = linearToDB(peakLevel);
+
+    // Map dB to height (MIN_DB at bottom, 0 dB at top)
+    float normalized = (peakDB - MIN_DB) / (MAX_DB - MIN_DB);
+    normalized = std::max(0.0f, std::min(1.0f, normalized));
+
+    float fillHeight = normalized * height;
+    float fillY = y + height - fillHeight;
+
+    // Draw meter with color gradient (green -> yellow -> red)
+    float greenThreshold = (-6.0f - MIN_DB) / (MAX_DB - MIN_DB);  // -6 dB
+    float yellowThreshold = (-3.0f - MIN_DB) / (MAX_DB - MIN_DB); // -3 dB
+
+    // Draw segments
+    if (normalized > 0) {
+        float currentY = y + height;
+        float segmentHeight = fillHeight;
+
+        // Green section (below -6 dB)
+        if (normalized <= greenThreshold) {
+            fillRect(x, fillY, width, fillHeight, Color::fromRGB(50, 200, 50));
+        } else {
+            float greenHeight = greenThreshold * height;
+            fillRect(x, y + height - greenHeight, width, greenHeight, Color::fromRGB(50, 200, 50));
+
+            // Yellow section (-6 to -3 dB)
+            if (normalized <= yellowThreshold) {
+                float yellowHeight = (normalized - greenThreshold) * height;
+                fillRect(x, fillY, width, yellowHeight, Color::fromRGB(200, 200, 50));
+            } else {
+                float yellowHeight = (yellowThreshold - greenThreshold) * height;
+                fillRect(x, y + height - greenHeight - yellowHeight, width, yellowHeight, Color::fromRGB(200, 200, 50));
+
+                // Red section (above -3 dB)
+                float redHeight = (normalized - yellowThreshold) * height;
+                fillRect(x, fillY, width, redHeight, Color::fromRGB(200, 50, 50));
+            }
+        }
+    }
+
+    // Draw 0 dB line
+    float zeroDBY = y + height * (1.0f - (0.0f - MIN_DB) / (MAX_DB - MIN_DB));
+    drawLine(x, zeroDBY, x + width, zeroDBY, DAWColors::TextPrimary, 1.0f);
+}
+
+void MixerWindow::drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float volumeDB, bool hovered) {
     // Draw slider track
     fillRect(x, y, width, height, DAWColors::Timeline);
     drawRect(x, y, width, height, DAWColors::GridLine, 1.0f);
 
+    // Map dB to slider position
+    float normalized = (volumeDB - MIN_DB) / (MAX_DB - MIN_DB);
+    normalized = std::max(0.0f, std::min(1.0f, normalized));
+
     // Draw filled portion
-    float fillHeight = value * height;
+    float fillHeight = normalized * height;
     float fillY = y + height - fillHeight;
     fillRect(x, fillY, width, fillHeight, hovered ? DAWColors::WaveformPeak : DAWColors::Waveform);
 
+    // Draw 0 dB line
+    float zeroDBY = y + height * (1.0f - (0.0f - MIN_DB) / (MAX_DB - MIN_DB));
+    drawLine(x - 2, zeroDBY, x + width + 2, zeroDBY, Color::fromRGB(150, 150, 150), 1.0f);
+
     // Draw slider thumb
-    float thumbY = y + (1.0f - value) * height;
+    float thumbY = y + (1.0f - normalized) * height;
     float thumbHeight = 6.0f;
     fillRect(x - 2, thumbY - thumbHeight / 2, width + 4, thumbHeight,
              hovered ? DAWColors::TextPrimary : DAWColors::TextSecondary);
@@ -342,7 +430,8 @@ void MixerWindow::onMouseDown(int x, int y, int button) {
             break;
 
         case ControlType::VolumeSlider: {
-            float newVolume = getValueFromSliderY(y, control->y, control->h);
+            float newVolumeDB = getDBFromSliderY(y, control->y, control->h);
+            float newVolume = dbToLinear(newVolumeDB);
             track->setVolume(newVolume);
             if (m_changeCallback) m_changeCallback();
             invalidate();
@@ -404,7 +493,8 @@ void MixerWindow::onMouseMove(int x, int y) {
 
     switch (m_draggedControl->type) {
         case ControlType::VolumeSlider: {
-            float newVolume = getValueFromSliderY(y, m_draggedControl->y, m_draggedControl->h);
+            float newVolumeDB = getDBFromSliderY(y, m_draggedControl->y, m_draggedControl->h);
+            float newVolume = dbToLinear(newVolumeDB);
             track->setVolume(newVolume);
             if (m_changeCallback) m_changeCallback();
             invalidate();

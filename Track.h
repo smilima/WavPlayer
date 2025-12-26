@@ -64,8 +64,13 @@ public:
     std::vector<TrackRegion>& getRegions() { return m_regions; }
 
     // Get audio at a specific time (for mixing)
-    void getAudioAtTime(double time, float* leftOut, float* rightOut, 
+    void getAudioAtTime(double time, float* leftOut, float* rightOut,
                         uint32_t sampleRate) const;
+
+    // Audio level metering (for VU meters)
+    float getPeakLevel() const { return m_peakLevel; }
+    void setPeakLevel(float level) { m_peakLevel = std::max(0.0f, std::min(1.0f, level)); }
+    void updatePeakLevel(float level);  // Update with decay
 
 private:
     void updateGains();  // Update cached gains when volume or pan changes
@@ -89,4 +94,7 @@ private:
     // Cached gain values (updated when volume or pan changes)
     mutable float m_cachedLeftGain = 1.0f;
     mutable float m_cachedRightGain = 1.0f;
+
+    // Audio metering
+    mutable float m_peakLevel = 0.0f;  // Current peak level (0.0 to 1.0)
 };

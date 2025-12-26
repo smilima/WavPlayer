@@ -47,7 +47,8 @@ private:
 
     // Helper functions
     void drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float x, float y, float width, float height);
-    void drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float value, bool hovered);
+    void drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height, float peakLevel);
+    void drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float volumeDB, bool hovered);
     void drawRotaryKnob(ID2D1RenderTarget* rt, float x, float y, float radius, float value, bool hovered, const wchar_t* label);
     void drawButton(ID2D1RenderTarget* rt, float x, float y, float width, float height, const wchar_t* text, bool active, bool hovered);
 
@@ -55,14 +56,24 @@ private:
     float getValueFromSliderY(int y, float sliderY, float sliderHeight);
     float getValueFromKnobAngle(int mouseX, int mouseY, float knobCenterX, float knobCenterY);
 
+    // dB conversion helpers
+    static float linearToDB(float linear);
+    static float dbToLinear(float db);
+    static float getDBFromSliderY(int y, float sliderY, float sliderHeight);
+
     // Constants
-    static constexpr float CHANNEL_WIDTH = 120.0f;
+    static constexpr float CHANNEL_WIDTH = 140.0f;  // Increased for VU meter
     static constexpr float CHANNEL_SPACING = 20.0f;
     static constexpr float MARGIN = 20.0f;
     static constexpr float KNOB_RADIUS = 20.0f;
     static constexpr float SLIDER_HEIGHT = 150.0f;
     static constexpr float SLIDER_WIDTH = 30.0f;
+    static constexpr float VU_METER_WIDTH = 15.0f;
     static constexpr float BUTTON_HEIGHT = 30.0f;
+
+    // dB scale range for volume slider
+    static constexpr float MIN_DB = -60.0f;
+    static constexpr float MAX_DB = 6.0f;
 
     // Data
     std::vector<std::shared_ptr<Track>>* m_tracks = nullptr;
