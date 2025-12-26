@@ -565,9 +565,7 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
         // Update master peak level with decay
         float currentPeak = m_masterPeakLevel.load();
         currentPeak *= DECAY_RATE;  // Apply decay
-        if (bufferPeakLevel > currentPeak) {
-            currentPeak = bufferPeakLevel;
-        }
+        currentPeak = bufferPeakLevel;
         m_masterPeakLevel.store(currentPeak);
 
         // Advance playback position
