@@ -17,6 +17,10 @@ public:
     using ChangeCallback = std::function<void()>;
     void setChangeCallback(ChangeCallback callback) { m_changeCallback = callback; }
 
+    // Function to get master peak level for VU meter
+    using MasterPeakGetter = std::function<float()>;
+    void setMasterPeakGetter(MasterPeakGetter getter) { m_masterPeakGetter = getter; }
+
 protected:
     void onRender(ID2D1RenderTarget* rt) override;
     void onResize(int width, int height) override;
@@ -46,6 +50,7 @@ private:
     };
 
     // Helper functions
+    void drawMasterVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height);
     void drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float x, float y, float width, float height);
     void drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height, float peakLevel);
     void drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float volumeDB, bool hovered);
@@ -62,6 +67,7 @@ private:
     static float getDBFromSliderY(int y, float sliderY, float sliderHeight);
 
     // Constants
+    static constexpr float MASTER_VU_WIDTH = 60.0f;  // Width of master VU meter section
     static constexpr float CHANNEL_WIDTH = 150.0f;  // Increased for VU meter
     static constexpr float CHANNEL_SPACING = 20.0f;
     static constexpr float MARGIN = 20.0f;
@@ -80,6 +86,7 @@ private:
     std::vector<Control> m_controls;
     Control* m_draggedControl = nullptr;
     ChangeCallback m_changeCallback;
+    MasterPeakGetter m_masterPeakGetter;
 
     // Cached rendering resources
     ID2D1PathGeometry* m_knobTickGeometry = nullptr;

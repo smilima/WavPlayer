@@ -49,11 +49,6 @@ void MixerWindow::onRender(ID2D1RenderTarget* rt) {
     // Draw title
     drawText(L"Track Mixer", MARGIN, MARGIN, DAWColors::TextPrimary);
 
-    if (!m_tracks || m_tracks->empty()) {
-        drawText(L"No tracks", MARGIN, MARGIN + 30, DAWColors::TextSecondary);
-        return;
-    }
-
     // Clear controls for rebuilding
     m_controls.clear();
 
@@ -61,16 +56,25 @@ void MixerWindow::onRender(ID2D1RenderTarget* rt) {
     float y = MARGIN + 40;
     float height = static_cast<float>(getHeight()) - y - MARGIN;
 
-    // Safely iterate through tracks with bounds checking
-    size_t trackCount = m_tracks->size();
-    for (size_t i = 0; i < trackCount; i++) {
-        // Validate track pointer before accessing
-        if (i >= m_tracks->size() || !(*m_tracks)[i]) {
-            continue;  // Skip invalid tracks
-        }
+    // Always draw master VU meter on the left
+    drawMasterVUMeter(rt, MARGIN, y, MASTER_VU_WIDTH, height);
 
-        float x = MARGIN + i * (CHANNEL_WIDTH + CHANNEL_SPACING);
-        drawChannelStrip(rt, static_cast<int>(i), x, y, CHANNEL_WIDTH, height);
+    // Draw track channel strips (if any)
+    if (m_tracks && !m_tracks->empty()) {
+        // Start tracks after master VU meter
+        float startX = MARGIN + MASTER_VU_WIDTH + CHANNEL_SPACING;
+
+        // Safely iterate through tracks with bounds checking
+        size_t trackCount = m_tracks->size();
+        for (size_t i = 0; i < trackCount; i++) {
+            // Validate track pointer before accessing
+            if (i >= m_tracks->size() || !(*m_tracks)[i]) {
+                continue;  // Skip invalid tracks
+            }
+
+            float x = startX + i * (CHANNEL_WIDTH + CHANNEL_SPACING);
+            drawChannelStrip(rt, static_cast<int>(i), x, y, CHANNEL_WIDTH, height);
+        }
     }
 }
 
@@ -240,6 +244,81 @@ void MixerWindow::drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float 
     soloControl.w = buttonWidth;
     soloControl.h = BUTTON_HEIGHT;
     m_controls.push_back(soloControl);
+}
+
+void MixerWindow::drawMasterVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height) {
+    // Draw background panel
+    fillRect(x, y, width, height, DAWColors::TrackBackground);
+    drawRect(x, y, width, height, DAWColors::GridLine, 1.0f);
+
+    // Draw label at top
+    drawText(L"Master", x + 5, y + 5, DAWColors::TextPrimary, width - 10);
+
+    // Get master peak level
+    float peakLevel = m_masterPeakGetter ? m_masterPeakGetter() : 0.0f;
+
+    // VU meter positioning (centered in the section, below the label)
+    float meterY = y + 35;
+    float meterHeight = height - 70;  // Leave space for label at top and value at bottom
+    float meterX = x + (width - VU_METER_WIDTH) / 2;
+
+    // Draw the VU meter
+    fillRect(meterX, meterY, VU_METER_WIDTH, meterHeight, DAWColors::Timeline);
+    drawRect(meterX, meterY, VU_METER_WIDTH, meterHeight, DAWColors::GridLine, 1.0f);
+
+    // Convert peak level to dB
+    float peakDB = linearToDB(peakLevel);
+
+    // Map dB to height (MIN_DB at bottom, MAX_DB at top)
+    float normalized = (peakDB - MIN_DB) / (MAX_DB - MIN_DB);
+    normalized = std::max(0.0f, std::min(1.0f, normalized));
+
+    float fillHeight = normalized * meterHeight;
+    float fillY = meterY + meterHeight - fillHeight;
+
+    // Draw meter with color gradient (green -> yellow -> red)
+    float greenThreshold = (-6.0f - MIN_DB) / (MAX_DB - MIN_DB);  // -6 dB
+    float yellowThreshold = (-3.0f - MIN_DB) / (MAX_DB - MIN_DB); // -3 dB
+
+    // Draw segments
+    if (normalized > 0) {
+        // Green section (below -6 dB)
+        if (normalized <= greenThreshold) {
+            fillRect(meterX, fillY, VU_METER_WIDTH, fillHeight, Color::fromRGB(50, 200, 50));
+        } else {
+            float greenHeight = greenThreshold * meterHeight;
+            fillRect(meterX, meterY + meterHeight - greenHeight, VU_METER_WIDTH, greenHeight, Color::fromRGB(50, 200, 50));
+
+            // Yellow section (-6 to -3 dB)
+            if (normalized <= yellowThreshold) {
+                float yellowHeight = (normalized - greenThreshold) * meterHeight;
+                fillRect(meterX, fillY, VU_METER_WIDTH, yellowHeight, Color::fromRGB(200, 200, 50));
+            } else {
+                float yellowHeight = (yellowThreshold - greenThreshold) * meterHeight;
+                fillRect(meterX, meterY + meterHeight - greenHeight - yellowHeight, VU_METER_WIDTH, yellowHeight, Color::fromRGB(200, 200, 50));
+
+                // Red section (above -3 dB)
+                float redHeight = (normalized - yellowThreshold) * meterHeight;
+                fillRect(meterX, fillY, VU_METER_WIDTH, redHeight, Color::fromRGB(200, 50, 50));
+            }
+        }
+    }
+
+    // Draw 0 dB line
+    float zeroDBY = meterY + meterHeight * (1.0f - (0.0f - MIN_DB) / (MAX_DB - MIN_DB));
+    drawLine(meterX, zeroDBY, meterX + VU_METER_WIDTH, zeroDBY, DAWColors::TextPrimary, 1.0f);
+
+    // Draw numeric peak level value below meter
+    wchar_t peakLabel[16];
+    if (peakDB <= MIN_DB) {
+        swprintf(peakLabel, 16, L"-inf");
+    } else {
+        swprintf(peakLabel, 16, L"%.1f", peakDB);
+    }
+
+    // Draw the text centered below the meter
+    float textY = meterY + meterHeight + 5;
+    drawText(peakLabel, x, textY, DAWColors::TextSecondary, width);
 }
 
 void MixerWindow::drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height, float peakLevel) {

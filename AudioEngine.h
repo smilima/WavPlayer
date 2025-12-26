@@ -103,7 +103,10 @@ public:
     // Master volume (0.0 to 1.0)
     void setVolume(float volume);
     float getVolume() const { return m_volume; }
-    
+
+    // Master peak level for VU meter (0.0 to 1.0)
+    float getMasterPeakLevel() const { return m_masterPeakLevel.load(); }
+
     // Input monitoring
     void setInputMonitoring(bool enabled) { m_inputMonitoring = enabled; }
     bool getInputMonitoring() const { return m_inputMonitoring; }
@@ -154,6 +157,7 @@ private:
     std::atomic<bool> m_isPlaying{false};
     std::atomic<bool> m_isPaused{false};  // True if paused (vs stopped)
     std::atomic<float> m_volume{1.0f};
+    std::atomic<float> m_masterPeakLevel{0.0f};  // Master output peak level for VU meter
 
     // Pre-allocated buffer for float conversion (avoids per-buffer allocation)
     std::vector<float> m_floatConversionBuffer;

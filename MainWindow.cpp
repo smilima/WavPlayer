@@ -192,6 +192,9 @@ void MainWindow::createChildViews() {
             m_timelineView->invalidate();
         }
     });
+    m_mixerWindow->setMasterPeakGetter([this]() {
+        return m_audioEngine ? m_audioEngine->getMasterPeakLevel() : 0.0f;
+    });
 }
 
 void MainWindow::configureTimelineCallbacks() {

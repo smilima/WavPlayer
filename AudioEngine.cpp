@@ -500,6 +500,7 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
         // Pre-calculate time increment to avoid per-frame division
         double currentTime = static_cast<double>(pos) / sampleRate;
         const double timeIncrement = 1.0 / sampleRate;
+        float bufferPeakLevel = 0.0f;  // Track peak for this buffer
 
         for (size_t frame = 0; frame < frameCount; ++frame) {
 
@@ -540,6 +541,10 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
                 leftMix = std::clamp(leftMix, -1.0f, 1.0f);
                 rightMix = std::clamp(rightMix, -1.0f, 1.0f);
 
+                // Track peak level for master VU meter
+                float framePeak = std::max(std::abs(leftMix), std::abs(rightMix));
+                bufferPeakLevel = std::max(bufferPeakLevel, framePeak);
+
                 // Convert to int16
                 buffer[frame * m_waveFormat.nChannels] = static_cast<int16_t>(leftMix * 32767.0f);
                 if (m_waveFormat.nChannels > 1) {
@@ -556,6 +561,14 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
         for (Track* track : activeTracks) {
             track->updatePeakLevel(0.0f);  // Apply decay
         }
+
+        // Update master peak level with decay
+        float currentPeak = m_masterPeakLevel.load();
+        currentPeak *= DECAY_RATE;  // Apply decay
+        if (bufferPeakLevel > currentPeak) {
+            currentPeak = bufferPeakLevel;
+        }
+        m_masterPeakLevel.store(currentPeak);
 
         // Advance playback position
         pos += frameCount;
