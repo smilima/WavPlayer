@@ -29,13 +29,13 @@ TEST(AudioUtilsTests, LinearToDB) {
     // Test 1.0 = 0 dB (unity gain)
     EXPECT_FLOAT_EQ(MixerWindow::linearToDB(1.0f), 0.0f);
 
-    // Test 2.0 = approximately +6 dB
+    // Test 2.0 = approximately +6.02 dB (20*log10(2.0) = 6.0206)
     float result = MixerWindow::linearToDB(2.0f);
-    EXPECT_NEAR(result, 6.0f, 0.01f);
+    EXPECT_NEAR(result, 6.0206f, 0.01f);
 
-    // Test 0.5 = approximately -6 dB
+    // Test 0.5 = approximately -6.02 dB (20*log10(0.5) = -6.0206)
     result = MixerWindow::linearToDB(0.5f);
-    EXPECT_NEAR(result, -6.0f, 0.01f);
+    EXPECT_NEAR(result, -6.0206f, 0.01f);
 
     // Test 0.0 = minimum dB
     result = MixerWindow::linearToDB(0.0f);
