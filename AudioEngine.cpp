@@ -487,9 +487,9 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
             }
 
             // Build list of tracks that should be processed
+            // Note: Muted tracks are still processed for VU metering
             for (const auto& track : *m_tracks) {
                 if (!track->isVisible()) continue;
-                if (track->isMuted()) continue;
                 if (hasSolo && !track->isSolo()) continue;
                 activeTracks.push_back(track.get());
             }
