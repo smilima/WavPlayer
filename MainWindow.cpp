@@ -1033,6 +1033,11 @@ void MainWindow::updatePlaybackPosition() {
         const double pos = m_audioEngine->getPosition();
         m_transportBar->setPosition(pos);
         m_timelineView->setPlayheadPosition(pos);
+
+        // Update mixer window VU meters during playback
+        if (m_mixerWindow && IsWindowVisible(m_mixerWindow->getHWND())) {
+            m_mixerWindow->invalidate();
+        }
     }
 
     if (m_audioEngine->isRecording()) {

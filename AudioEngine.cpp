@@ -550,7 +550,13 @@ void AudioEngine::processAudio(int16_t* buffer, size_t frameCount) {
             // Increment time for next frame (avoids per-frame division)
             currentTime += timeIncrement;
         }
-        
+
+        // Apply peak level decay to all active tracks
+        constexpr float DECAY_RATE = 0.995f;  // Slight decay per buffer
+        for (Track* track : activeTracks) {
+            track->updatePeakLevel(0.0f);  // Apply decay
+        }
+
         // Advance playback position
         pos += frameCount;
         if (pos >= totalFrames) {
