@@ -62,13 +62,13 @@ private:
     static float getDBFromSliderY(int y, float sliderY, float sliderHeight);
 
     // Constants
-    static constexpr float CHANNEL_WIDTH = 140.0f;  // Increased for VU meter
+    static constexpr float CHANNEL_WIDTH = 150.0f;  // Increased for VU meter
     static constexpr float CHANNEL_SPACING = 20.0f;
     static constexpr float MARGIN = 20.0f;
     static constexpr float KNOB_RADIUS = 20.0f;
     static constexpr float SLIDER_HEIGHT = 150.0f;
     static constexpr float SLIDER_WIDTH = 30.0f;
-    static constexpr float VU_METER_WIDTH = 15.0f;
+    static constexpr float VU_METER_WIDTH = 22.0f;  // Wider to prevent text wrapping
     static constexpr float BUTTON_HEIGHT = 30.0f;
 
     // dB scale range for volume slider

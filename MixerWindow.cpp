@@ -291,28 +291,49 @@ void MixerWindow::drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float wid
 }
 
 void MixerWindow::drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float volumeDB, bool hovered) {
-    // Draw slider track
-    fillRect(x, y, width, height, DAWColors::Timeline);
-    drawRect(x, y, width, height, DAWColors::GridLine, 1.0f);
+    // Draw slider track (narrower center track)
+    float trackWidth = 4.0f;
+    float trackX = x + (width - trackWidth) / 2;
+    fillRect(trackX, y, trackWidth, height, DAWColors::Timeline);
+    drawRect(trackX, y, trackWidth, height, DAWColors::GridLine, 0.5f);
+
+    // Draw scale markings on the side
+    // Key dB levels: +6, 0, -6, -12, -20, -30, -40, -60
+    float dbLevels[] = { 6.0f, 0.0f, -6.0f, -12.0f, -20.0f, -30.0f, -40.0f, -60.0f };
+    for (float dbLevel : dbLevels) {
+        float levelNormalized = (dbLevel - MIN_DB) / (MAX_DB - MIN_DB);
+        float levelY = y + (1.0f - levelNormalized) * height;
+
+        // Draw tick mark on right side
+        bool isMajor = (dbLevel == 0.0f || dbLevel == -6.0f || dbLevel == -12.0f);
+        float tickLength = isMajor ? 6.0f : 4.0f;
+        drawLine(x + width, levelY, x + width + tickLength, levelY,
+                 DAWColors::TextSecondary, isMajor ? 1.0f : 0.5f);
+    }
+
+    // Draw 0 dB line (more prominent)
+    float zeroDBY = y + height * (1.0f - (0.0f - MIN_DB) / (MAX_DB - MIN_DB));
+    drawLine(x - 2, zeroDBY, x + width + 8, zeroDBY, Color::fromRGB(200, 200, 200), 1.5f);
 
     // Map dB to slider position
     float normalized = (volumeDB - MIN_DB) / (MAX_DB - MIN_DB);
     normalized = std::max(0.0f, std::min(1.0f, normalized));
 
-    // Draw filled portion
-    float fillHeight = normalized * height;
-    float fillY = y + height - fillHeight;
-    fillRect(x, fillY, width, fillHeight, hovered ? DAWColors::WaveformPeak : DAWColors::Waveform);
+    // Draw slider fader cap (larger, more prominent)
+    float faderY = y + (1.0f - normalized) * height;
+    float faderHeight = 12.0f;
+    float faderWidth = width + 6.0f;
+    float faderX = x - 3.0f;
 
-    // Draw 0 dB line
-    float zeroDBY = y + height * (1.0f - (0.0f - MIN_DB) / (MAX_DB - MIN_DB));
-    drawLine(x - 2, zeroDBY, x + width + 2, zeroDBY, Color::fromRGB(150, 150, 150), 1.0f);
+    // Fader cap with 3D effect
+    fillRect(faderX, faderY - faderHeight / 2, faderWidth, faderHeight,
+             hovered ? DAWColors::ButtonHover : DAWColors::ButtonNormal);
+    drawRect(faderX, faderY - faderHeight / 2, faderWidth, faderHeight,
+             DAWColors::GridLine, 1.0f);
 
-    // Draw slider thumb
-    float thumbY = y + (1.0f - normalized) * height;
-    float thumbHeight = 6.0f;
-    fillRect(x - 2, thumbY - thumbHeight / 2, width + 4, thumbHeight,
-             hovered ? DAWColors::TextPrimary : DAWColors::TextSecondary);
+    // Add center line on fader cap
+    drawLine(faderX + 2, faderY, faderX + faderWidth - 2, faderY,
+             DAWColors::TextSecondary, 1.0f);
 }
 
 void MixerWindow::drawRotaryKnob(ID2D1RenderTarget* rt, float x, float y, float radius, float value, bool hovered, const wchar_t* label) {
