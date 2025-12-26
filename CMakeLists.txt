@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Windows-specific settings
 if(WIN32)
-    add_definitions(-DUNICODE -D_UNICODE)
+    add_definitions(-DUNICODE -D_UNICODE -DNOMINMAX)
     set(CMAKE_WIN32_EXECUTABLE ON)
 endif()
 
@@ -95,7 +95,7 @@ target_link_libraries(WavPlayerTests PRIVATE
 )
 
 # Add compiler definitions for tests
-target_compile_definitions(WavPlayerTests PRIVATE UNICODE _UNICODE)
+target_compile_definitions(WavPlayerTests PRIVATE UNICODE _UNICODE NOMINMAX)
 
 # Include Google Test module
 include(GoogleTest)
