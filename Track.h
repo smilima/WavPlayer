@@ -26,7 +26,17 @@ public:
 
     float getPan() const { return m_pan; }
     void setPan(float pan);
-    
+
+    // EQ controls (-12 to +12 dB)
+    float getEQLow() const { return m_eqLow; }
+    void setEQLow(float gain) { m_eqLow = std::clamp(gain, -12.0f, 12.0f); }
+
+    float getEQMid() const { return m_eqMid; }
+    void setEQMid(float gain) { m_eqMid = std::clamp(gain, -12.0f, 12.0f); }
+
+    float getEQHigh() const { return m_eqHigh; }
+    void setEQHigh(float gain) { m_eqHigh = std::clamp(gain, -12.0f, 12.0f); }
+
     bool isMuted() const { return m_muted; }
     void setMuted(bool muted) { m_muted = muted; }
     
@@ -54,8 +64,13 @@ public:
     std::vector<TrackRegion>& getRegions() { return m_regions; }
 
     // Get audio at a specific time (for mixing)
-    void getAudioAtTime(double time, float* leftOut, float* rightOut, 
+    void getAudioAtTime(double time, float* leftOut, float* rightOut,
                         uint32_t sampleRate) const;
+
+    // Audio level metering (for VU meters)
+    float getPeakLevel() const { return m_peakLevel; }
+    void setPeakLevel(float level) { m_peakLevel = std::max(0.0f, std::min(1.0f, level)); }
+    void updatePeakLevel(float level);  // Update with decay
 
 private:
     void updateGains();  // Update cached gains when volume or pan changes
@@ -63,6 +78,9 @@ private:
     std::wstring m_name;
     float m_volume = 1.0f;
     float m_pan = 0.0f;  // -1.0 (left) to 1.0 (right)
+    float m_eqLow = 0.0f;   // -12.0 to +12.0 dB
+    float m_eqMid = 0.0f;   // -12.0 to +12.0 dB
+    float m_eqHigh = 0.0f;  // -12.0 to +12.0 dB
     bool m_muted = false;
     bool m_solo = false;
     bool m_armed = false;
@@ -76,4 +94,7 @@ private:
     // Cached gain values (updated when volume or pan changes)
     mutable float m_cachedLeftGain = 1.0f;
     mutable float m_cachedRightGain = 1.0f;
+
+    // Audio metering
+    mutable float m_peakLevel = 0.0f;  // Current peak level (0.0 to 1.0)
 };

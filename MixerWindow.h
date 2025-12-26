@@ -1,0 +1,93 @@
+#pragma once
+#include "D2DWindow.h"
+#include "Track.h"
+#include <vector>
+#include <memory>
+#include <functional>
+
+class MixerWindow : public D2DWindow {
+public:
+    MixerWindow();
+    ~MixerWindow() override;
+
+    // Set the tracks to display in the mixer
+    void setTracks(std::vector<std::shared_ptr<Track>>* tracks);
+
+    // Callback when mixer values change
+    using ChangeCallback = std::function<void()>;
+    void setChangeCallback(ChangeCallback callback) { m_changeCallback = callback; }
+
+    // Function to get master peak level for VU meter
+    using MasterPeakGetter = std::function<float()>;
+    void setMasterPeakGetter(MasterPeakGetter getter) { m_masterPeakGetter = getter; }
+
+    // dB conversion helpers (public for testing and reuse)
+    static float linearToDB(float linear);
+    static float dbToLinear(float db);
+
+    // dB scale range constants (public for testing)
+    static constexpr float MIN_DB = -60.0f;
+    static constexpr float MAX_DB = 6.0f;
+
+protected:
+    void onRender(ID2D1RenderTarget* rt) override;
+    void onResize(int width, int height) override;
+    void onMouseDown(int x, int y, int button) override;
+    void onMouseUp(int x, int y, int button) override;
+    void onMouseMove(int x, int y) override;
+    bool onClose() override { return true; }  // Hide instead of destroy
+
+private:
+    // UI element types
+    enum class ControlType {
+        None,
+        VolumeSlider,
+        PanKnob,
+        LowEQKnob,
+        MidEQKnob,
+        HighEQKnob,
+        MuteButton,
+        SoloButton
+    };
+
+    struct Control {
+        ControlType type;
+        int trackIndex;
+        float x, y, w, h;
+        bool hovered = false;
+    };
+
+    // Helper functions
+    void drawMasterVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height);
+    void drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float x, float y, float width, float height);
+    void drawVUMeter(ID2D1RenderTarget* rt, float x, float y, float width, float height, float peakLevel);
+    void drawVolumeSlider(ID2D1RenderTarget* rt, float x, float y, float width, float height, float volumeDB, bool hovered);
+    void drawRotaryKnob(ID2D1RenderTarget* rt, float x, float y, float radius, float value, bool hovered, const wchar_t* label);
+    void drawButton(ID2D1RenderTarget* rt, float x, float y, float width, float height, const wchar_t* text, bool active, bool hovered);
+
+    Control* getControlAtPosition(int x, int y);
+    float getValueFromSliderY(int y, float sliderY, float sliderHeight);
+    float getValueFromKnobAngle(int mouseX, int mouseY, float knobCenterX, float knobCenterY);
+    static float getDBFromSliderY(int y, float sliderY, float sliderHeight);
+
+    // Constants
+    static constexpr float MASTER_VU_WIDTH = 60.0f;  // Width of master VU meter section
+    static constexpr float CHANNEL_WIDTH = 150.0f;  // Increased for VU meter
+    static constexpr float CHANNEL_SPACING = 20.0f;
+    static constexpr float MARGIN = 20.0f;
+    static constexpr float KNOB_RADIUS = 20.0f;
+    static constexpr float SLIDER_HEIGHT = 150.0f;
+    static constexpr float SLIDER_WIDTH = 30.0f;
+    static constexpr float VU_METER_WIDTH = 22.0f;  // Wider to prevent text wrapping
+    static constexpr float BUTTON_HEIGHT = 30.0f;
+
+    // Data
+    std::vector<std::shared_ptr<Track>>* m_tracks = nullptr;
+    std::vector<Control> m_controls;
+    Control* m_draggedControl = nullptr;
+    ChangeCallback m_changeCallback;
+    MasterPeakGetter m_masterPeakGetter;
+
+    // Cached rendering resources
+    ID2D1PathGeometry* m_knobTickGeometry = nullptr;
+};

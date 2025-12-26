@@ -9,7 +9,7 @@ int WINAPI wWinMain(
     _In_opt_ HINSTANCE hPrevInstance,
     _In_ LPWSTR lpCmdLine,
     _In_ int nCmdShow
-) 
+)
 {
     // Enable per-monitor DPI awareness (Windows 8.1+)
     // Falls back gracefully on older systems

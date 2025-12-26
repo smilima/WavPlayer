@@ -436,14 +436,25 @@ void TimelineView::drawTrackHeader(ID2D1RenderTarget* rt, Track& track,
     fillRect(btnX, btnY, btnSize, btnSize, armColor);
     drawText(L"R", btnX + 5, btnY, DAWColors::TextPrimary, btnSize, btnSize);
 
-    // Volume indicator (simple bar)
+    // Volume indicator (dB scale bar)
     float volBarX = TRACK_HEADER_WIDTH - 30;
     float volBarH = height - 40;
     float volBarW = 8;
     float volBarY = y + 30;
 
     fillRect(volBarX, volBarY, volBarW, volBarH, DAWColors::ButtonNormal);
-    float volFill = volBarH * track.getVolume();
+
+    // Convert volume to dB and map to bar height
+    constexpr float MIN_DB = -60.0f;
+    constexpr float MAX_DB = 6.0f;
+    float volumeDB = (track.getVolume() <= 0.0f) ? MIN_DB :
+                     20.0f * log10f(track.getVolume());
+    volumeDB = std::max(MIN_DB, std::min(MAX_DB, volumeDB));
+
+    // Map dB to normalized height (0-1)
+    float normalized = (volumeDB - MIN_DB) / (MAX_DB - MIN_DB);
+    float volFill = volBarH * normalized;
+
     fillRect(volBarX, volBarY + volBarH - volFill, volBarW, volFill,
         Color(0.4f, 0.8f, 0.4f));
 

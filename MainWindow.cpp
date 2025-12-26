@@ -50,6 +50,7 @@ enum MenuID {
     ID_VIEW_ZOOM_FIT,
     ID_VIEW_FOLLOW_PLAYHEAD,
     ID_VIEW_SPECTRUM,
+    ID_VIEW_MIXER,
     ID_HELP_ABOUT
 };
 
@@ -101,6 +102,11 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
 
     // Load and apply settings to views
     loadSettings();
+
+    // Show mixer window if it was visible when app was closed
+    if (m_settings.getMixerWindowVisible() && m_mixerWindow) {
+        ShowWindow(m_mixerWindow->getHWND(), SW_SHOW);
+    }
 
     // Show window (maximized if it was maximized last time)
     int showCmd = m_settings.getWindowMaximized() ? SW_SHOWMAXIMIZED : SW_SHOW;
@@ -170,6 +176,25 @@ void MainWindow::createChildViews() {
     m_spectrumWindow = std::make_unique<SpectrumWindow>();
     m_spectrumWindow->create(nullptr, 100, 100, 600, 400, L"SpectrumWindow");
     SetWindowText(m_spectrumWindow->getHWND(), L"Spectrum Analyzer");
+
+    // Create mixer window (hidden by default) with saved position
+    m_mixerWindow = std::make_unique<MixerWindow>();
+    m_mixerWindow->create(nullptr,
+        m_settings.getMixerWindowX(),
+        m_settings.getMixerWindowY(),
+        m_settings.getMixerWindowWidth(),
+        m_settings.getMixerWindowHeight(),
+        L"MixerWindow");
+    SetWindowText(m_mixerWindow->getHWND(), L"Track Mixer");
+    m_mixerWindow->setTracks(&m_project->getTracks());
+    m_mixerWindow->setChangeCallback([this]() {
+        if (m_timelineView) {
+            m_timelineView->invalidate();
+        }
+    });
+    m_mixerWindow->setMasterPeakGetter([this]() {
+        return m_audioEngine ? m_audioEngine->getMasterPeakLevel() : 0.0f;
+    });
 }
 
 void MainWindow::configureTimelineCallbacks() {
@@ -507,6 +532,7 @@ void MainWindow::setupMenus() const {
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_FOLLOW_PLAYHEAD, L"&Follow Playhead\tF");
     AppendMenu(viewMenu, MF_SEPARATOR, 0, nullptr);
     AppendMenu(viewMenu, MF_STRING, ID_VIEW_SPECTRUM, L"Show &Spectrum");
+    AppendMenu(viewMenu, MF_STRING, ID_VIEW_MIXER, L"Show &Mixer");
     AppendMenu(menuBar, MF_POPUP, reinterpret_cast<UINT_PTR>(viewMenu), L"&View");
 
     HMENU helpMenu = CreatePopupMenu();
@@ -544,6 +570,12 @@ void MainWindow::syncProjectToUI() {
 
     m_timelineView->setBPM(m_project->getBPM());
     m_transportBar->setBPM(m_project->getBPM());
+
+    // Update mixer window with current tracks
+    if (m_mixerWindow) {
+        m_mixerWindow->setTracks(&m_project->getTracks());
+        m_mixerWindow->invalidate();
+    }
 
     resetPlaybackToStart();
     refreshProjectDuration();
@@ -1014,6 +1046,11 @@ void MainWindow::updatePlaybackPosition() {
         const double pos = m_audioEngine->getPosition();
         m_transportBar->setPosition(pos);
         m_timelineView->setPlayheadPosition(pos);
+
+        // Update mixer window VU meters during playback
+        if (m_mixerWindow && IsWindowVisible(m_mixerWindow->getHWND())) {
+            m_mixerWindow->invalidate();
+        }
     }
 
     if (m_audioEngine->isRecording()) {
@@ -1095,6 +1132,13 @@ void MainWindow::onCommand(int id) {
             SetForegroundWindow(m_spectrumWindow->getHWND());
         }
         break;
+    case ID_VIEW_MIXER:
+        if (m_mixerWindow) {
+            ShowWindow(m_mixerWindow->getHWND(), SW_SHOW);
+            SetForegroundWindow(m_mixerWindow->getHWND());
+            m_mixerWindow->invalidate();
+        }
+        break;
     case ID_HELP_ABOUT:
         showAboutDialog();
         break;
@@ -1158,6 +1202,7 @@ void MainWindow::loadSettings() {
 void MainWindow::saveSettings() {
     // Save window position and size
     saveWindowPosition();
+    saveMixerWindowPosition();
 
     // Save timeline settings
     if (m_timelineView) {
@@ -1194,6 +1239,25 @@ void MainWindow::saveWindowPosition() {
         m_settings.setWindowY(rc.top);
         m_settings.setWindowWidth(rc.right - rc.left);
         m_settings.setWindowHeight(rc.bottom - rc.top);
+    }
+}
+
+void MainWindow::saveMixerWindowPosition() {
+    if (!m_mixerWindow) return;
+
+    HWND mixerHwnd = m_mixerWindow->getHWND();
+    if (!mixerHwnd) return;
+
+    // Save visibility state
+    m_settings.setMixerWindowVisible(IsWindowVisible(mixerHwnd) != 0);
+
+    // Save position and size
+    RECT rc;
+    if (GetWindowRect(mixerHwnd, &rc)) {
+        m_settings.setMixerWindowX(rc.left);
+        m_settings.setMixerWindowY(rc.top);
+        m_settings.setMixerWindowWidth(rc.right - rc.left);
+        m_settings.setMixerWindowHeight(rc.bottom - rc.top);
     }
 }
 
