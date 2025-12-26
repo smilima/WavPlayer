@@ -61,14 +61,29 @@ void MixerWindow::onRender(ID2D1RenderTarget* rt) {
     float y = MARGIN + 40;
     float height = static_cast<float>(getHeight()) - y - MARGIN;
 
-    for (size_t i = 0; i < m_tracks->size(); i++) {
+    // Safely iterate through tracks with bounds checking
+    size_t trackCount = m_tracks->size();
+    for (size_t i = 0; i < trackCount; i++) {
+        // Validate track pointer before accessing
+        if (i >= m_tracks->size() || !(*m_tracks)[i]) {
+            continue;  // Skip invalid tracks
+        }
+
         float x = MARGIN + i * (CHANNEL_WIDTH + CHANNEL_SPACING);
         drawChannelStrip(rt, static_cast<int>(i), x, y, CHANNEL_WIDTH, height);
     }
 }
 
 void MixerWindow::drawChannelStrip(ID2D1RenderTarget* rt, int trackIndex, float x, float y, float width, float height) {
+    // Validate track index and pointer
+    if (trackIndex < 0 || trackIndex >= static_cast<int>(m_tracks->size())) {
+        return;
+    }
+
     auto track = (*m_tracks)[trackIndex];
+    if (!track) {
+        return;  // Skip if track pointer is invalid
+    }
 
     // Draw background panel
     fillRect(x, y, width, height, DAWColors::TrackBackground);
@@ -439,7 +454,7 @@ void MixerWindow::onResize(int width, int height) {
 }
 
 void MixerWindow::onMouseDown(int x, int y, int button) {
-    if (button != 0 || !m_tracks) return;  // Left button only
+    if (button != 0 || !m_tracks || m_tracks->empty()) return;  // Left button only
 
     Control* control = getControlAtPosition(x, y);
     if (!control || control->trackIndex >= static_cast<int>(m_tracks->size())) {
@@ -447,6 +462,8 @@ void MixerWindow::onMouseDown(int x, int y, int button) {
     }
 
     auto track = (*m_tracks)[control->trackIndex];
+    if (!track) return;  // Validate track pointer
+
     m_draggedControl = control;
 
     switch (control->type) {
@@ -516,13 +533,14 @@ void MixerWindow::onMouseUp(int x, int y, int button) {
 }
 
 void MixerWindow::onMouseMove(int x, int y) {
-    if (!m_draggedControl || !m_tracks) return;
+    if (!m_draggedControl || !m_tracks || m_tracks->empty()) return;
 
     if (m_draggedControl->trackIndex >= static_cast<int>(m_tracks->size())) {
         return;
     }
 
     auto track = (*m_tracks)[m_draggedControl->trackIndex];
+    if (!track) return;  // Validate track pointer
 
     switch (m_draggedControl->type) {
         case ControlType::VolumeSlider: {
