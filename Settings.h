@@ -31,11 +31,13 @@ public:
     int getMixerWindowY() const { return m_mixerWindowY; }
     int getMixerWindowWidth() const { return m_mixerWindowWidth; }
     int getMixerWindowHeight() const { return m_mixerWindowHeight; }
+    bool getMixerWindowVisible() const { return m_mixerWindowVisible; }
 
     void setMixerWindowX(int x) { m_mixerWindowX = x; }
     void setMixerWindowY(int y) { m_mixerWindowY = y; }
     void setMixerWindowWidth(int width) { m_mixerWindowWidth = width; }
     void setMixerWindowHeight(int height) { m_mixerWindowHeight = height; }
+    void setMixerWindowVisible(bool visible) { m_mixerWindowVisible = visible; }
 
     // Timeline settings
     double getPixelsPerSecond() const { return m_pixelsPerSecond; }
@@ -80,6 +82,7 @@ private:
     int m_mixerWindowY = 100;
     int m_mixerWindowWidth = 800;
     int m_mixerWindowHeight = 600;
+    bool m_mixerWindowVisible = false;
 
     // Timeline settings
     double m_pixelsPerSecond = 100.0;

@@ -103,6 +103,11 @@ bool MainWindow::create(const wchar_t* title, int width, int height) {
     // Load and apply settings to views
     loadSettings();
 
+    // Show mixer window if it was visible when app was closed
+    if (m_settings.getMixerWindowVisible() && m_mixerWindow) {
+        ShowWindow(m_mixerWindow->getHWND(), SW_SHOW);
+    }
+
     // Show window (maximized if it was maximized last time)
     int showCmd = m_settings.getWindowMaximized() ? SW_SHOWMAXIMIZED : SW_SHOW;
     ShowWindow(m_hwnd, showCmd);
@@ -1240,6 +1245,10 @@ void MainWindow::saveMixerWindowPosition() {
     HWND mixerHwnd = m_mixerWindow->getHWND();
     if (!mixerHwnd) return;
 
+    // Save visibility state
+    m_settings.setMixerWindowVisible(IsWindowVisible(mixerHwnd) != 0);
+
+    // Save position and size
     RECT rc;
     if (GetWindowRect(mixerHwnd, &rc)) {
         m_settings.setMixerWindowX(rc.left);

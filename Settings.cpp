@@ -39,6 +39,7 @@ void Settings::load() {
     m_mixerWindowY = readInt(L"MixerWindow", L"Y", m_mixerWindowY);
     m_mixerWindowWidth = readInt(L"MixerWindow", L"Width", m_mixerWindowWidth);
     m_mixerWindowHeight = readInt(L"MixerWindow", L"Height", m_mixerWindowHeight);
+    m_mixerWindowVisible = readBool(L"MixerWindow", L"Visible", m_mixerWindowVisible);
 
     // Timeline settings
     m_pixelsPerSecond = readDouble(L"Timeline", L"PixelsPerSecond", m_pixelsPerSecond);
@@ -64,6 +65,7 @@ void Settings::save() {
     writeInt(L"MixerWindow", L"Y", m_mixerWindowY);
     writeInt(L"MixerWindow", L"Width", m_mixerWindowWidth);
     writeInt(L"MixerWindow", L"Height", m_mixerWindowHeight);
+    writeBool(L"MixerWindow", L"Visible", m_mixerWindowVisible);
 
     // Timeline settings
     writeDouble(L"Timeline", L"PixelsPerSecond", m_pixelsPerSecond);
